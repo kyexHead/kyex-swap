@@ -170,16 +170,6 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         } else {
             (SwapAmounts memory swapAmounts) = calculateSwapAmounts(zrc20, targetTokenAddress, amount, slippage);
 
-            /*
-                struct SwapAmounts {
-                    uint256 inputForGas;
-                    address gasZRC20;
-                    uint256 gasFee;
-                    uint256 outputAmount;
-                    bool isTargetZeta;
-                    address wzeta;
-                }
-            */
             uint256 feeAmount = swapAmounts.outputAmount * platformFee / 10000;
             uint256 newAmount = swapAmounts.outputAmount - feeAmount;
 
