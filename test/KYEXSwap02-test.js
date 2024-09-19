@@ -46,6 +46,8 @@ describe("Test deployment and initialization", function () {
   });
 });
 
+describe("Test deployment and initialization", function () {});
+
 ///////////////////
-// Test zrcSwapToNative
+// Test onCrossChainCall
 ///////////////////

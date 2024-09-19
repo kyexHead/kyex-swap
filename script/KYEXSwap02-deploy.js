@@ -50,8 +50,6 @@ async function deployKyexSwap02() {
       KYEXSwap02Factory,
       [
         wzetaAddr,
-        UniswapRouterAddr,
-        UniswapFactoryAddr,
         deployer.address,
         600, //MAX_DEADLINE
         0, //platformFee
@@ -65,8 +63,6 @@ async function deployKyexSwap02() {
 
     return {
       WZETA: wzeta,
-      UniswapRouter: UniswapRouter,
-      UniswapFactory: UniswapFactory,
       MAX_DEADLINE: 600,
       platformFee: 0,
       MAX_SLIPPAGE: 500,
