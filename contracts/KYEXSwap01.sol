@@ -10,6 +10,37 @@ import "libraries/zetaV2/interfaces/IZRC20.sol";
 import "libraries/zetaV2/interfaces/IWZETA.sol";
 import "libraries/TransferHelper.sol";
 import "libraries/error/Errors.sol";
+import "libraries/UniswapV2Library.sol";
+
+/*
+
+██╗░░██╗██╗░░░██╗███████╗██╗░░██╗
+██║░██╔╝╚██╗░██╔╝██╔════╝╚██╗██╔╝
+█████═╝░░╚████╔╝░█████╗░░░╚███╔╝░
+██╔═██╗░░░╚██╔╝░░██╔══╝░░░██╔██╗░
+██║░╚██╗░░░██║░░░███████╗██╔╝╚██╗
+╚═╝░░╚═╝░░░╚═╝░░░╚══════╝╚═╝░░╚═╝
+
+░█████╗░██████╗░░█████╗░░██████╗░██████╗░░░░░░░█████╗░██╗░░██╗░█████╗░██╗███╗░░██╗
+██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝░░░░░░██╔══██╗██║░░██║██╔══██╗██║████╗░██║
+██║░░╚═╝██████╔╝██║░░██║╚█████╗░╚█████╗░█████╗██║░░╚═╝███████║███████║██║██╔██╗██║
+██║░░██╗██╔══██╗██║░░██║░╚═══██╗░╚═══██╗╚════╝██║░░██╗██╔══██║██╔══██║██║██║╚████║
+╚█████╔╝██║░░██║╚█████╔╝██████╔╝██████╔╝░░░░░░╚█████╔╝██║░░██║██║░░██║██║██║░╚███║
+░╚════╝░╚═╝░░╚═╝░╚════╝░╚═════╝░╚═════╝░░░░░░░░╚════╝░╚═╝░░╚═╝╚═╝░░╚═╝╚═╝╚═╝░░╚══╝
+
+░██████╗░██╗░░░░░░░██╗░█████╗░██████╗░
+██╔════╝░██║░░██╗░░██║██╔══██╗██╔══██╗
+╚█████╗░░╚██╗████╗██╔╝███████║██████╔╝
+░╚═══██╗░░████╔═████║░██╔══██║██╔═══╝░
+██████╔╝░░╚██╔╝░╚██╔╝░██║░░██║██║░░░░░
+╚═════╝░░░░╚═╝░░░╚═╝░░╚═╝░░╚═╝╚═╝░░░░░
+*/
+
+/**
+* @title KYEX ZRC Swap
+* @author KYEX-TEAM
+* @notice KYEX Mainnet ZETACHAIN zrcSwap Smart Contract V1
+*/
 
 contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
@@ -24,6 +55,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     uint32 private MAX_DEADLINE;
     uint16 private platformFee;
     uint16 private MAX_SLIPPAGE;
+    uint256 public volume = 0; 
 
     ///////////////////
     // Events
@@ -40,6 +72,10 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
     // Initialize Function
     ///////////////////
+
+    /**
+     * @notice To Iinitialize contract after deployed.
+     */
     function initialize(
         address _WZETA, //Note: when deploying on the mainnet，this line should be deleted.
         address _UniswapRouter,
@@ -61,33 +97,55 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     }
 
     ///////////////////
-    // public Function
+    // Public Function
     ///////////////////
-    //Note: when deploying on the mainnet, this function should be deleted.
+
+    /**
+     * @dev Note: when deploying on the mainnet, this function should be deleted.
+     * @return Return WZETA Address
+     */
     function getWZETA() public view returns (address) {
         return WZETA;
     }
 
+    /**
+     * @return Return UniswapRouter Address
+     */
     function getUniswapRouter() public view returns (address) {
         return UniswapRouter;
     }
 
+    /**
+     * @return Return UniswapFactory Address
+     */
     function getUniswapFactory() public view returns (address) {
         return UniswapFactory;
     }
 
+    /**
+     * @return Return KyexTreasury Address
+     */
     function getKyexTreasury() public view returns (address) {
         return kyexTreasury;
     }
 
+    /**
+     * @return Return Platform Fee
+     */
     function getPlatformFee() public view returns (uint16) {
         return platformFee;
     }
 
+    /**
+     * @return Return Max Slippage Allow
+     */
     function getMaxSlippage() public view returns (uint16) {
         return MAX_SLIPPAGE;
     }
 
+    /**
+     * @return Return Max Deadline for swap
+     */
     function getMaxDeadLine() public view returns (uint32) {
         return MAX_DEADLINE;
     }
@@ -172,6 +230,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
             }
         }
 
+        getZetaQuote(tokenInOfZetaChain, WZETA, amountIn);
         emit SwapExecuted(msg.sender, tokenInOfZetaChain, tokenOutOfZetaChain, amountIn, amountOut);
     }
 
@@ -203,6 +262,13 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     // Internal Function
     ///////////////////
     function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    
+    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256) { 
+        (uint reserveA, uint reserveB)= UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
+        uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
+        volume += amount;
+    }
 
     // Helper functions to calculate minimum output and maximum input amounts based on slippage tolerance
     function calculateMinimumOutputAmount(uint256 amountIn, address[] memory path, uint256 slippageTolerance)

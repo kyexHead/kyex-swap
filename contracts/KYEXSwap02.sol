@@ -9,6 +9,37 @@ import "libraries/TransferHelper.sol";
 import "libraries/BytesHelperLib.sol";
 import "libraries/zetaV2/interfaces/IWZETA.sol";
 import "libraries/error/Errors.sol";
+import "libraries/UniswapV2Library.sol";
+
+/*
+
+██╗░░██╗██╗░░░██╗███████╗██╗░░██╗
+██║░██╔╝╚██╗░██╔╝██╔════╝╚██╗██╔╝
+█████═╝░░╚████╔╝░█████╗░░░╚███╔╝░
+██╔═██╗░░░╚██╔╝░░██╔══╝░░░██╔██╗░
+██║░╚██╗░░░██║░░░███████╗██╔╝╚██╗
+╚═╝░░╚═╝░░░╚═╝░░░╚══════╝╚═╝░░╚═╝
+
+░█████╗░██████╗░░█████╗░░██████╗░██████╗░░░░░░░█████╗░██╗░░██╗░█████╗░██╗███╗░░██╗
+██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝░░░░░░██╔══██╗██║░░██║██╔══██╗██║████╗░██║
+██║░░╚═╝██████╔╝██║░░██║╚█████╗░╚█████╗░█████╗██║░░╚═╝███████║███████║██║██╔██╗██║
+██║░░██╗██╔══██╗██║░░██║░╚═══██╗░╚═══██╗╚════╝██║░░██╗██╔══██║██╔══██║██║██║╚████║
+╚█████╔╝██║░░██║╚█████╔╝██████╔╝██████╔╝░░░░░░╚█████╔╝██║░░██║██║░░██║██║██║░╚███║
+░╚════╝░╚═╝░░╚═╝░╚════╝░╚═════╝░╚═════╝░░░░░░░░╚════╝░╚═╝░░╚═╝╚═╝░░╚═╝╚═╝╚═╝░░╚══╝
+
+░██████╗░██╗░░░░░░░██╗░█████╗░██████╗░
+██╔════╝░██║░░██╗░░██║██╔══██╗██╔══██╗
+╚█████╗░░╚██╗████╗██╔╝███████║██████╔╝
+░╚═══██╗░░████╔═████║░██╔══██║██╔═══╝░
+██████╔╝░░╚██╔╝░╚██╔╝░██║░░██║██║░░░░░
+╚═════╝░░░░╚═╝░░░╚═╝░░╚═╝░░╚═╝╚═╝░░░░░
+*/
+
+/**
+* @title KYEX Cross-Chain Swap
+* @author KYEX-TEAM
+* @notice KYEX Mainnet Main kyexSwap Smart Contract V1
+*/
 
 contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
@@ -35,6 +66,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     uint16 private platformFee;
     uint16 private MAX_SLIPPAGE;
     SystemContract private systemContract;
+    uint256 public volume = 0; 
 
     ///////////////////
     // Events
@@ -167,6 +199,8 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
             sameNetworkSwap(zrc20, sameNetworkAddress, amount, recipientAddress, slippage);
         } else if (isWithdraw == 3) {
             transferERC20(zrc20, targetTokenAddress, amount, recipientAddress, slippage);
+        } else if (isWithdraw == 4) {
+            depositZRC(zrc20, amount, address(uint160(bytes20(recipientAddress))));
         } else {
             (SwapAmounts memory swapAmounts) = calculateSwapAmounts(zrc20, targetTokenAddress, amount, slippage);
 
@@ -202,6 +236,8 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
                 newAmount
             );
         }
+
+        getZetaQuote(zrc20, WZETA, amount);
     }
 
     function updateTreasuryAddress(address _newAddress) external onlyOwner {
@@ -238,6 +274,20 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     // Internal Function
     ///////////////////
     function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256) { 
+        (uint reserveA, uint reserveB)= UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
+        uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
+        volume += amount;
+    }
+
+    function depositZRC(address tokenAddress, uint256 amount, address recipientAddress) internal {
+        address recipient = address(uint160(bytes20(recipientAddress)));
+        bool transferSuccess = IZRC20(tokenAddress).transfer(recipient, amount);
+
+        require(transferSuccess, "Transfer Fail");
+        emit WrappedTokenTransfer(amount, recipient);
+    }
 
     function wrapAndTransfer(address wzeta, uint256 amount, address recipient) internal {
         IWETH9(wzeta).transfer(recipient, amount);
