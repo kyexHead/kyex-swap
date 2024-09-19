@@ -99,7 +99,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     // Public Function
     ///////////////////
     //Note: when deploying on the mainnet, this function should be deleted.
-    function getZETA() public view returns (address) {
+    function getWZETA() public view returns (address) {
         return WZETA;
     }
 
