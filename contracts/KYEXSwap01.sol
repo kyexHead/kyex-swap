@@ -177,6 +177,9 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         (tokenInOfZetaChain == WZETA) ? volume += amountIn : volume += getZetaQuote(tokenInOfZetaChain, WZETA, amountIn);
         emit SwapExecuted(msg.sender, tokenInOfZetaChain, tokenOutOfZetaChain, amountIn, amountOut);
     }
+    /**
+     * @dev update config
+     */
 
     function updateConfig(uint16 _slippage, uint16 _newFee, address _newAddress) external onlyOwner {
         MAX_SLIPPAGE = _slippage;
@@ -187,14 +190,22 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
     // Internal Function
     ///////////////////
+    /**
+     * @dev Control upgrade authority
+     */
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
+    /**
+     * @dev Calculate trading volume and standardize tokenIn to WZETA
+     */
     function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256 amount) {
         (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
         amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
     }
 
-    // Helper functions to calculate minimum output and maximum input amounts based on slippage tolerance
+    /**
+     * @dev Helper functions to calculate minimum output amounts based on slippage tolerance
+     */
     function calculateMinimumOutputAmount(uint256 amountIn, address[] memory path, uint256 slippageTolerance)
         internal
         view
@@ -204,6 +215,9 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         return amountsOut[amountsOut.length - 1] * (1000 - slippageTolerance) / (1000);
     }
 
+    /**
+     * @dev Helper functions to calculate maximum input amounts based on slippage tolerance
+     */
     function calculateMaximumInputAmount(uint256 amountOut, address[] memory path, uint256 slippageTolerance)
         internal
         view
