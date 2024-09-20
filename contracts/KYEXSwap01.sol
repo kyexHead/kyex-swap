@@ -96,58 +96,11 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         volume = 0;
     }
 
-    ///////////////////
-    // Public Function
-    ///////////////////
-
-    /**
-     * @dev Note: when deploying on the mainnet, this function should be deleted.
-     * @return Return WZETA Address
-     */
-    function getWZETA() public view returns (address) {
-        return WZETA;
-    }
-
-    /**
-     * @return Return UniswapRouter Address
-     */
-    function getUniswapRouter() public view returns (address) {
-        return UniswapRouter;
-    }
-
-    /**
-     * @return Return UniswapFactory Address
-     */
-    function getUniswapFactory() public view returns (address) {
-        return UniswapFactory;
-    }
-
-    /**
-     * @return Return KyexTreasury Address
-     */
-    function getKyexTreasury() public view returns (address) {
-        return kyexTreasury;
-    }
-
     /**
      * @return Return Platform Fee
      */
     function getPlatformFee() public view returns (uint16) {
         return platformFee;
-    }
-
-    /**
-     * @return Return Max Slippage Allow
-     */
-    function getMaxSlippage() public view returns (uint16) {
-        return MAX_SLIPPAGE;
-    }
-
-    /**
-     * @return Return Max Deadline for swap
-     */
-    function getMaxDeadLine() public view returns (uint32) {
-        return MAX_DEADLINE;
     }
 
     ///////////////////
