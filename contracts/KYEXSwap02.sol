@@ -68,10 +68,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
     // Events
     ///////////////////
-    event TreasuryAddressUpdated(address newAddress);
-    event PlatformFeeUpdated(uint16 newFee);
     event PlatformFeeSent(uint256 amount, address zrc20);
-    event MaxSlippageUpdated(uint16 slippage);
     event SwapExecuted(uint256 amount, address targetTokenAddress, address recipient);
     event WrappedTokenTransfer(uint256 outputAmount, address recipient);
     event UnWrapZetaTokenTransfer(uint256 outputAmount, address recipient);
@@ -86,8 +83,6 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     );
     event ZETAWithdrawn(address indexed owner, uint256 amount);
     event TokenWithdrawn(address indexed token, address indexed treasury, uint256 amount);
-    event MaxDeadLineUpdated(uint32 maxDeadLine);
-    event systemContractUpdated(address newAddress);
 
     ///////////////////
     // Modifiers
@@ -102,6 +97,10 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
     // Initialize Function
     ///////////////////
+
+    /**
+     * @notice To Iinitialize contract after deployed.
+     */
     function initialize(
         address _WZETA, //Note: when deploying on the mainnet，this line should be deleted.
         address _kyexTreasury,
@@ -124,27 +123,46 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
     // Public Function
     ///////////////////
-    //Note: when deploying on the mainnet, this function should be deleted.
+
+    /**
+     * @return WZETA address
+     * @notice when deploying on the mainnet, this function should be deleted
+     */
     function getWZETA() public view returns (address) {
         return WZETA;
     }
 
+    /**
+     * @return Treasury Address
+     */
     function getTreasuryAddress() public view returns (address) {
         return kyexTreasury;
     }
 
+    /**
+     * @return Platform Fee
+     */
     function getPlatformFee() public view returns (uint16) {
         return platformFee;
     }
 
+    /**
+     * @return MAX DEADLINE
+     */
     function getMaxDeadLine() public view returns (uint32) {
         return MAX_DEADLINE;
     }
 
+    /**
+     * @return MAX SLIPPAGE
+     */
     function getMaxSlippage() public view returns (uint16) {
         return MAX_SLIPPAGE;
     }
 
+    /**
+     * @return SystemContract address
+     */
     function getSystemContract() public view returns (address) {
         return address(systemContract);
     }
@@ -152,6 +170,10 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
     // External Function
     ///////////////////
+
+    /**
+     * @dev Withdraw ZETA from the contract, only the owner can execute this operation
+     */
     function withdrawZETA() external onlyOwner {
         uint256 balance = address(this).balance;
         if (balance == 0) revert Errors.InsufficientFunds();
@@ -160,6 +182,9 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         emit ZETAWithdrawn(owner(), balance);
     }
 
+    /**
+     * @dev Withdraw ZRC20 token from the contract, only the owner can execute this operation
+     */
     function withdrawZRCToken(address tokenAddress, address recipient) external onlyOwner {
         uint256 balance = IZRC20(tokenAddress).balanceOf(address(this));
         if (balance == 0) revert Errors.InsufficientFunds();
@@ -168,6 +193,20 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         emit TokenWithdrawn(tokenAddress, recipient, balance);
     }
 
+    /**
+     * @dev Enables cross-chain token swaps, likely utilizing ZetaChain for bridging.
+     *
+     * @param context: ZetaChain context data.
+     * @param zrc20: Address of the ZRC20 token being swapped.
+     * @param amount: Amount of the ZRC20 token.
+     * @param message: Encoded message containing swap details (isWithdraw, slippage, targetTokenAddress, sameNetworkAddress, recipientAddress)
+     * @notice Handles scenarios based on isWithdraw value:
+     *          0: Same-network swap
+     *          1: Wrap and transfer (for WZETA)
+     *          2: Unwrap and transfer (for WZETA)
+     *          3: Transfer ERC20 token
+     *          4: Deposit ZRC20 token
+     */
     function onCrossChainCall(zContext calldata context, address zrc20, uint256 amount, bytes calldata message)
         external
         override
@@ -182,10 +221,13 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         ) = decodeMessage(message, context.chainID);
 
         if (isWithdraw == 0) {
+            //Same-network swap
             sameNetworkSwap(zrc20, sameNetworkAddress, amount, recipientAddress, slippage);
         } else if (isWithdraw == 3) {
+            //Unwrap and transfer (for WZETA)
             transferERC20(zrc20, targetTokenAddress, amount, recipientAddress, slippage);
         } else if (isWithdraw == 4) {
+            //Deposit ZRC20 token
             depositZRC(zrc20, amount, address(uint160(bytes20(recipientAddress))));
         } else {
             (SwapAmounts memory swapAmounts) = calculateSwapAmounts(zrc20, targetTokenAddress, amount, slippage);
@@ -196,12 +238,16 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
             TransferHelper.safeTransfer(targetTokenAddress, kyexTreasury, feeAmount);
 
             address recipient = address(uint160(bytes20(recipientAddress)));
+            //targetToken is ZETA
             if (swapAmounts.isTargetZeta) {
                 if (isWithdraw == 1) {
+                    //Wrap and transfer (for WZETA)
                     wrapAndTransfer(swapAmounts.wzeta, newAmount, recipient);
                 } else if (isWithdraw == 2) {
+                    //Unwrap and transfer (for WZETA)
                     unWrapAndTransfer(swapAmounts.wzeta, newAmount, recipient);
                 }
+                //targetToken is ZRC20
             } else {
                 if (isWithdraw == 1) {
                     transferZRC20(targetTokenAddress, newAmount, recipient);
@@ -228,34 +274,35 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
 
     function updateTreasuryAddress(address _newAddress) external onlyOwner {
         kyexTreasury = _newAddress;
-        emit TreasuryAddressUpdated(_newAddress);
     }
 
     function updatePlatformFee(uint16 _newFee) external onlyOwner {
         platformFee = _newFee;
-        emit PlatformFeeUpdated(_newFee);
     }
 
     function updateSlippage(uint16 _slippage) external onlyOwner {
         MAX_SLIPPAGE = _slippage;
-        emit MaxSlippageUpdated(_slippage);
     }
 
     function updateMaxDeadLine(uint32 _maxDeadLine) external onlyOwner {
         MAX_DEADLINE = _maxDeadLine;
-        emit MaxDeadLineUpdated(_maxDeadLine);
     }
 
     function updateSystemContract(address _systemContract) external onlyOwner {
         systemContract = SystemContract(_systemContract);
-        emit systemContractUpdated(_systemContract);
     }
 
     ///////////////////
     // Internal Function
     ///////////////////
+    /**
+     * @dev Control upgrade authority
+     */
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
+    /**
+     * @dev Calculate trading volume and standardize tokenIn to WZETA
+     */
     function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal {
         if (tokenIn == WZETA) {
             volume += amountIn;
@@ -272,6 +319,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         bool transferSuccess = IZRC20(tokenAddress).transfer(recipient, amount);
 
         require(transferSuccess, "Transfer Fail");
+        if (!transferSuccess) revert Errors.TransferFailed();
         emit WrappedTokenTransfer(amount, recipient);
     }
 
