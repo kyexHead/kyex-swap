@@ -91,14 +91,8 @@ This contract is the core of the KYEX platform, handling:
    * Initialize the contract's state variables and set the owner by calling the `initialize` function. 
 3. **Set up Access Control:** Transfer contract ownership to the appropriate address or multi-sig wallet.
 
-## Additional Notes
 
-* **Mainnet Deployment:** Remember to adjust the WZETA address and other relevant configurations when deploying to the mainnet.
-* **Security:** A thorough security audit is strongly recommended before mainnet deployment.
-* **Gas Optimization:** The contract could benefit from gas optimization techniques to reduce user transaction costs.
-
-**Disclaimer:** This README provides a basic overview. More detailed technical documentation might be necessary for a comprehensive understanding of the contract's complexities.
-
+## ---------------------------------------------------------------
 
 # KYEX Swap 02 
 
@@ -126,18 +120,23 @@ KYEXSwap02 appears to be the core contract for the KYEX project, facilitating cr
         * `context`: ZetaChain context data.
         * `zrc20`: Address of the ZRC20 token being swapped.
         * `amount`: Amount of the ZRC20 token.
-        * `message`: Encoded message containing swap details (`isWithdraw`, `slippage`, `targetTokenAddress`, `sameNetworkAddress`, `recipientAddress`).
+        * `message`: Encoded message containing swap details 
+            * `isWithdraw`
+            * `slippage`
+            * `targetTokenAddress`
+            * `sameNetworkAddress`
+            * `recipientAddress`
     * **Expected Output:**
         * Executes the appropriate swap or transfer operation based on the message data.
         * Emits `SwapExecuted` and potentially other events.
     * **Business Logic:**
         * Decodes the message to extract swap parameters.
         * Handles scenarios based on `isWithdraw` value:
-            * 0: Same-network swap
-            * 1: Wrap and transfer (for WZETA)
-            * 2: Unwrap and transfer (for WZETA)
-            * 3: Transfer ERC20 token
-            * 4: Deposit ZRC20 token
+            * `0`: Same-network swap
+            * `1`: Wrap and transfer (for WZETA)
+            * `2`: Unwrap and transfer (for WZETA)
+            * `3`: Transfer ERC20 token
+            * `4`: Deposit ZRC20 token
         * Calculates and deducts platform fees.
         * Interacts with Uniswap, ZRC20 contracts, and potentially ZetaChain's system contract.
 
@@ -148,7 +147,11 @@ KYEXSwap02 appears to be the core contract for the KYEX project, facilitating cr
         * `newAmount`: Amount to be swapped.
         * `slippage`: Allowed slippage tolerance.
     * **Expected Output:**
-        * Returns a `SwapAmounts` struct with details about the required gas token, gas fee, output amount, and target token status.
+        * Returns a `SwapAmounts` struct with details about: 
+            * the required gas token
+            * gas fee
+            * output amount
+            * target token status
     * **Business Logic:**
         * Determines if the target token is WZETA.
         * Calculates gas fee and required input amount (if not WZETA).
@@ -178,9 +181,4 @@ KYEXSwap02 appears to be the core contract for the KYEX project, facilitating cr
 2. **Deploy & Initialize:** Deploy UUPS proxy contract and initialize it using the `initialize` function.
 3. **Set up Access Control:** Transfer ownership.
 
-## Additional Notes
-
-* Mainnet deployment requires specific address adjustments (WZETA).
-* Security audit is crucial before mainnet deployment.
-* Gas optimization is recommended.
 

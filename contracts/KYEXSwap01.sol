@@ -52,16 +52,14 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     address private UniswapFactory;
     address private kyexTreasury;
     uint32 private MAX_DEADLINE;
-    uint16 private platformFee;
     uint16 private MAX_SLIPPAGE;
     uint256 public volume;
+    uint16 public platformFee;
+
 
     ///////////////////
     // Events
     ///////////////////
-    event TreasuryAddressUpdated(address newAddress);
-    event PlatformFeeUpdated(uint256 newFee);
-    event MaxSlippageUpdated(uint256 slippage);
     event SwapExecuted(address indexed sender, address tokenA, address tokenB, uint256 amountA, uint256 amountB);
     event PerformSwap(address tokenA, address tokenB, uint256 amountIn, uint256 amountOut);
     event ZETAWrapped(address indexed sender, uint256 amount);
@@ -94,13 +92,6 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         platformFee = _platformFee;
         MAX_SLIPPAGE = _MAX_SLIPPAGE;
         volume = 0;
-    }
-
-    /**
-     * @return Return Platform Fee
-     */
-    function getPlatformFee() public view returns (uint16) {
-        return platformFee;
     }
 
     ///////////////////
@@ -158,6 +149,10 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
             gasZRC20 = WZETA;
         }
 
+        // (gasZRC20, ) = ((tokenOutOfZetaChain != WZETA) ? IZRC20(tokenOutOfZetaChain).withdrawGasFee() : (WZETA, 0)) ;
+
+
+
         if (tokenOutOfZetaChain != gasZRC20) {
             // tokenOutOfZetaChain is not equals to gasZRC20
             // eg: tokenOutOfZetaChain = Zeta.USDC(ETH), gasZRC20 = Zeta.ETH(ETH)
@@ -187,28 +182,10 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         emit SwapExecuted(msg.sender, tokenInOfZetaChain, tokenOutOfZetaChain, amountIn, amountOut);
     }
 
-    function updateTreasuryAddress(address _newAddress) external onlyOwner {
-        kyexTreasury = _newAddress;
-        emit TreasuryAddressUpdated(_newAddress);
-    }
-
-    function updatePlatformFee(uint16 _newFee) external onlyOwner {
-        platformFee = _newFee;
-        emit PlatformFeeUpdated(_newFee);
-    }
-
-    function updateSlippage(uint16 _slippage) external onlyOwner {
+    function updateConfig(uint16 _slippage, uint16 _newFee, address _newAddress) external onlyOwner {
         MAX_SLIPPAGE = _slippage;
-        emit MaxSlippageUpdated(_slippage);
-    }
-
-    function updateUniswap(address _uniswapRouter, address _uniswapFactory) external onlyOwner {
-        UniswapRouter = _uniswapRouter;
-        UniswapFactory = _uniswapFactory;
-    }
-
-    function updateMaxDeadLine(uint16 _maxDeadLine) external onlyOwner {
-        MAX_DEADLINE = _maxDeadLine; // default 600
+        platformFee = _newFee;
+        kyexTreasury = _newAddress;
     }
 
     ///////////////////
@@ -217,13 +194,9 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
     function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal {
-        if (tokenIn == WZETA) {
-            volume += amountIn;
-        } else {
-            (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
-            uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
-            volume += amount;
-        }
+        (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
+        uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
+        (tokenIn == WZETA) ?  volume += amountIn : volume += amount;
     }
 
     // Helper functions to calculate minimum output and maximum input amounts based on slippage tolerance
@@ -245,10 +218,10 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         return amountsIn[0] * (1000 + slippageTolerance) / 1000;
     }
 
-    function checkPairExists(address tokenA, address tokenB) internal view returns (bool) {
-        address pairAddress = IUniswapV2Factory(UniswapFactory).getPair(tokenA, tokenB);
-        return pairAddress != address(0); // True if the pair exists, false otherwise
-    }
+    // function checkPairExists(address tokenA, address tokenB) internal view returns (bool) {
+    //     address pairAddress = IUniswapV2Factory(UniswapFactory).getPair(tokenA, tokenB);
+    //     return pairAddress != address(0); // True if the pair exists, false otherwise
+    // }
 
     function sendZETA(address tokenA, uint256 amount, bool isWrap) internal returns (uint256) {
         if (tokenA != WZETA) revert Errors.OnlySupportZETA();
@@ -451,7 +424,8 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
             );
             amountOut = amounts[1];
         } else {
-            if (checkPairExists(tokenA, tokenB)) {
+            address pairAddress = IUniswapV2Factory(UniswapFactory).getPair(tokenA, tokenB);
+            if (pairAddress != address(0)) {
                 path = new address[](2);
                 path[0] = tokenA;
                 path[1] = tokenB;
@@ -519,7 +493,10 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
             if (!sent) revert Errors.TransferFailed();
         } else {
             // Transfer WETH to recipient
-            IWETH9(token).transfer(recipient, amount);
+            // IWETH9(token).transfer(recipient, amount);
+
+            TransferHelper.safeTransfer(token, recipient, amount);
+
         }
 
         emit TokenTransfer(recipient, amount);
