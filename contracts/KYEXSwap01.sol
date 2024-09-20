@@ -56,7 +56,6 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     uint256 public volume;
     uint16 public platformFee;
 
-
     ///////////////////
     // Events
     ///////////////////
@@ -151,8 +150,6 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
 
         // (gasZRC20, ) = ((tokenOutOfZetaChain != WZETA) ? IZRC20(tokenOutOfZetaChain).withdrawGasFee() : (WZETA, 0)) ;
 
-
-
         if (tokenOutOfZetaChain != gasZRC20) {
             // tokenOutOfZetaChain is not equals to gasZRC20
             // eg: tokenOutOfZetaChain = Zeta.USDC(ETH), gasZRC20 = Zeta.ETH(ETH)
@@ -177,8 +174,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
                 }
             }
         }
-
-        getZetaQuote(tokenInOfZetaChain, WZETA, amountIn);
+        (tokenInOfZetaChain == WZETA) ? volume += amountIn : volume += getZetaQuote(tokenInOfZetaChain, WZETA, amountIn);
         emit SwapExecuted(msg.sender, tokenInOfZetaChain, tokenOutOfZetaChain, amountIn, amountOut);
     }
 
@@ -193,10 +189,9 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
-    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal {
+    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256 amount) {
         (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
-        uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
-        (tokenIn == WZETA) ?  volume += amountIn : volume += amount;
+        amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
     }
 
     // Helper functions to calculate minimum output and maximum input amounts based on slippage tolerance
@@ -496,7 +491,6 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
             // IWETH9(token).transfer(recipient, amount);
 
             TransferHelper.safeTransfer(token, recipient, amount);
-
         }
 
         emit TokenTransfer(recipient, amount);

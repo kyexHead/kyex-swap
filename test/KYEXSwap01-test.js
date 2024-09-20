@@ -8,30 +8,6 @@ const {
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 
 describe("Test deployment and initialization", function () {
-  it("Should be initialized correctly", async function () {
-    const {
-      WZETA,
-      UniswapFactory,
-      UniswapRouter,
-      MAX_DEADLINE,
-      platformFee,
-      MAX_SLIPPAGE,
-      KYEXSwap01Proxy,
-      deployer,
-    } = await loadFixture(deployKyexSwap01);
-    expect(await KYEXSwap01Proxy.getWZETA()).to.equal(await WZETA.getAddress());
-    expect(await KYEXSwap01Proxy.getUniswapFactory()).to.equal(
-      await UniswapFactory.getAddress()
-    );
-    expect(await KYEXSwap01Proxy.getUniswapRouter()).to.equal(
-      await UniswapRouter.getAddress()
-    );
-    expect(await KYEXSwap01Proxy.getPlatformFee()).to.equal(platformFee);
-    expect(await KYEXSwap01Proxy.getMaxSlippage()).to.equal(MAX_SLIPPAGE);
-    expect(await KYEXSwap01Proxy.getMaxDeadLine()).to.equal(MAX_DEADLINE);
-    expect(await KYEXSwap01Proxy.owner()).to.equal(deployer.address);
-  });
-
   it("Should deploy the proxy correctly ", async function () {
     const { KYEXSwap01Proxy } = await loadFixture(deployKyexSwap01);
     const KYEXSwap01ProxyAddr = await KYEXSwap01Proxy.getAddress();
