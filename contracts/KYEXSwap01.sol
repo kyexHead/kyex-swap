@@ -3,7 +3,7 @@
 pragma solidity ^0.8.20;
 
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "@uniswap/v2-periphery/contracts/libraries/UniswapV2Library.sol";
+import "libraries/UniswapV2Library.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -54,7 +54,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     uint32 private MAX_DEADLINE;
     uint16 private platformFee;
     uint16 private MAX_SLIPPAGE;
-    uint256 public volume = 0;
+    uint256 public volume;
 
     ///////////////////
     // Events
@@ -93,6 +93,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         MAX_DEADLINE = _MAX_DEADLINE;
         platformFee = _platformFee;
         MAX_SLIPPAGE = _MAX_SLIPPAGE;
+        volume = 0;
     }
 
     ///////////////////
@@ -262,10 +263,14 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
-    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256) {
-        (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
-        uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
-        volume += amount;
+    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal {
+        if (tokenIn == WZETA) {
+            volume += amountIn;
+        } else {
+            (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
+            uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
+            volume += amount;
+        }
     }
 
     // Helper functions to calculate minimum output and maximum input amounts based on slippage tolerance

@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@uniswap/v2-periphery/contracts/libraries/UniswapV2Library.sol";
+import "libraries/UniswapV2Library.sol";
 import "libraries/SwapHelperLib.sol";
 import "libraries/TransferHelper.sol";
 import "libraries/BytesHelperLib.sol";
@@ -63,7 +63,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     uint16 private platformFee;
     uint16 private MAX_SLIPPAGE;
     SystemContract private systemContract;
-    uint256 public volume = 0;
+    uint256 public volume;
 
     ///////////////////
     // Events
@@ -118,6 +118,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         platformFee = _platformFee;
         MAX_SLIPPAGE = _MAX_SLIPPAGE;
         systemContract = SystemContract(_systemContract);
+        volume = 0;
     }
 
     ///////////////////
@@ -175,19 +176,16 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         (
             uint32 isWithdraw,
             uint32 slippage,
-            address targetTokenAddress, //WZETA
+            address targetTokenAddress,
             address sameNetworkAddress,
             bytes memory recipientAddress
         ) = decodeMessage(message, context.chainID);
 
         if (isWithdraw == 0) {
-            //ERC20 - ERC20
             sameNetworkSwap(zrc20, sameNetworkAddress, amount, recipientAddress, slippage);
         } else if (isWithdraw == 3) {
-            //ERC20 - swap - zetaChain
             transferERC20(zrc20, targetTokenAddress, amount, recipientAddress, slippage);
         } else if (isWithdraw == 4) {
-            //ERC20 -zetaChain
             depositZRC(zrc20, amount, address(uint160(bytes20(recipientAddress))));
         } else {
             (SwapAmounts memory swapAmounts) = calculateSwapAmounts(zrc20, targetTokenAddress, amount, slippage);
@@ -258,11 +256,15 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
-    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256) {
-        address UniswapV2FactoryAddr = systemContract.uniswapv2FactoryAddress();
-        (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapV2FactoryAddr, tokenIn, tokenOut);
-        uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
-        volume += amount;
+    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal {
+        if (tokenIn == WZETA) {
+            volume += amountIn;
+        } else {
+            address UniswapV2FactoryAddr = systemContract.uniswapv2FactoryAddress();
+            (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapV2FactoryAddr, tokenIn, tokenOut);
+            uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
+            volume += amount;
+        }
     }
 
     function depositZRC(address tokenAddress, uint256 amount, address recipientAddress) internal {
@@ -325,8 +327,9 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         bytes memory recipientAddress,
         uint32 slippage
     ) internal {
-        uint256 outputAmount =
-            SwapHelperLib.swapExactTokensForTokens(systemContract, zrc20, amount, targetTokenAddress, 0, slippage);
+        uint256 outputAmount = SwapHelperLib.swapExactTokensForTokens(
+            systemContract, zrc20, amount, targetTokenAddress, 0, slippage, MAX_DEADLINE
+        );
         if (outputAmount == 0) revert Errors.SwapFailed();
         if (!IZRC20(targetTokenAddress).approve(targetTokenAddress, outputAmount)) revert Errors.ApprovalFailed();
 
@@ -353,14 +356,16 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
 
         (address gasZRC20, uint256 gasFee) = IZRC20(sameNetworkTokenAddress).withdrawGasFee();
         // swap WZETA
-        uint256 outputAmount = SwapHelperLib.swapExactTokensForTokens(systemContract, zrc20, amount, WZETA, 0, slippage);
-        uint256 inputForGas =
-            SwapHelperLib.swapTokensForExactTokens(systemContract, WZETA, gasFee, gasZRC20, outputAmount, slippage);
+        uint256 outputAmount =
+            SwapHelperLib.swapExactTokensForTokens(systemContract, zrc20, amount, WZETA, 0, slippage, MAX_DEADLINE);
+        uint256 inputForGas = SwapHelperLib.swapTokensForExactTokens(
+            systemContract, WZETA, gasFee, gasZRC20, outputAmount, slippage, MAX_DEADLINE
+        );
         uint256 remainingAmount = IWETH9(WZETA).balanceOf(address(this));
         if (inputForGas == 0) revert Errors.SwapFailed();
 
         uint256 finalAmount = SwapHelperLib.swapExactTokensForTokens(
-            systemContract, WZETA, remainingAmount, sameNetworkTokenAddress, 0, slippage
+            systemContract, WZETA, remainingAmount, sameNetworkTokenAddress, 0, slippage, MAX_DEADLINE
         );
         // uint256 feeAmount = finalAmount.mul(platformFee).div(10000);
         // uint256 newAmount = finalAmount.sub(feeAmount);
@@ -425,7 +430,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         if (!swapAmounts.isTargetZeta) {
             (swapAmounts.gasZRC20, swapAmounts.gasFee) = IZRC20(targetTokenAddress).withdrawGasFee();
             swapAmounts.inputForGas = SwapHelperLib.swapTokensForExactTokens(
-                systemContract, zrc20, swapAmounts.gasFee, swapAmounts.gasZRC20, newAmount, slippage
+                systemContract, zrc20, swapAmounts.gasFee, swapAmounts.gasZRC20, newAmount, slippage, MAX_DEADLINE
             );
         }
         swapAmounts.outputAmount = SwapHelperLib.swapExactTokensForTokens(
@@ -434,7 +439,8 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
             swapAmounts.isTargetZeta ? newAmount : newAmount - swapAmounts.inputForGas,
             targetTokenAddress,
             0,
-            slippage
+            slippage,
+            MAX_DEADLINE
         );
     }
 

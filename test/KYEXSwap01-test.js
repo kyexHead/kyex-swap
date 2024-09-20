@@ -374,7 +374,7 @@ describe("Test tokenOutOfZetaChain equals WZETA ", function () {
     expect(await MockZRC20ETH.balanceOf(deployerAddr)).to.equal(
       ethers.parseUnits("490", 18)
     );
-    //1000 - 500 + amountOut
+    //10000 - 500 + amountOut
     expect(await ethers.provider.getBalance(deployerAddr)).to.be.gt(9500);
   });
 });

@@ -69,6 +69,8 @@ async function deployKyexSwap02() {
       KYEXSwap02Proxy: KYEXSwap02Proxy,
       deployer: deployer,
       MockSystemContract: MockSystemContract,
+      UniswapFactory: UniswapFactory,
+      UniswapRouter: UniswapRouter,
     };
   } else if (network.name == "zeta_test") {
     // TODO

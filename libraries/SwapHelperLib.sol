@@ -2,15 +2,11 @@
 pragma solidity 0.8.26;
 
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router01.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "./zetaV2/interfaces/IZRC20.sol";
 import "./zetaV2/SystemContract.sol";
 
 library SwapHelperLib {
-    uint16 internal constant MAX_DEADLINE = 600;
-    address internal constant UniswapRouter = 0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe;
-    address internal constant UniswapFactory = 0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c;
-
     error WrongGasContract();
 
     error NotEnoughToPayGasFee();
@@ -56,25 +52,29 @@ library SwapHelperLib {
     }
 
     function _existsPairPool(address uniswapV2Factory, address zrc20A, address zrc20B) internal view returns (bool) {
-        address uniswapPool = uniswapv2PairFor(uniswapV2Factory, zrc20A, zrc20B);
+        // address uniswapPool = uniswapv2PairFor(uniswapV2Factory, zrc20A, zrc20B);
+        address uniswapPool = IUniswapV2Factory(uniswapV2Factory).getPair(zrc20A, zrc20B);
+
         return IZRC20(zrc20A).balanceOf(uniswapPool) > 0 && IZRC20(zrc20B).balanceOf(uniswapPool) > 0;
     }
 
     // Helper functions to calculate minimum output and maximum input amounts based on slippage tolerance
-    function calculateMinimumOutputAmount(uint256 amountIn, address[] memory path, uint256 slippageTolerance)
-        internal
-        view
-        returns (uint256)
-    {
+    function calculateMinimumOutputAmount(
+        uint256 amountIn,
+        address[] memory path,
+        uint256 slippageTolerance,
+        address UniswapRouter
+    ) internal view returns (uint256) {
         uint256[] memory amountsOut = IUniswapV2Router02(UniswapRouter).getAmountsOut(amountIn, path);
         return amountsOut[amountsOut.length - 1] * (1000 - slippageTolerance) / 1000;
     }
 
-    function calculateMaximumInputAmount(uint256 amountOut, address[] memory path, uint256 slippageTolerance)
-        internal
-        view
-        returns (uint256)
-    {
+    function calculateMaximumInputAmount(
+        uint256 amountOut,
+        address[] memory path,
+        uint256 slippageTolerance,
+        address UniswapRouter
+    ) internal view returns (uint256) {
         uint256[] memory amountsIn = IUniswapV2Router02(UniswapRouter).getAmountsIn(amountOut, path);
         return amountsIn[0] * (1000 + slippageTolerance) / 1000;
     }
@@ -85,10 +85,10 @@ library SwapHelperLib {
         uint256 amount,
         address targetZRC20,
         uint256 minAmountOut,
-        uint32 slippage
+        uint32 slippage,
+        uint32 MAX_DEADLINE
     ) internal returns (uint256) {
         bool existsPairPool = _existsPairPool(systemContract.uniswapv2FactoryAddress(), zrc20, targetZRC20);
-
         address[] memory path;
         if (existsPairPool) {
             path = new address[](2);
@@ -101,7 +101,7 @@ library SwapHelperLib {
             path[2] = targetZRC20;
         }
 
-        minAmountOut = calculateMinimumOutputAmount(amount, path, slippage);
+        minAmountOut = calculateMinimumOutputAmount(amount, path, slippage, systemContract.uniswapv2Router02Address());
 
         IZRC20(zrc20).approve(address(systemContract.uniswapv2Router02Address()), amount);
         uint256[] memory amounts = IUniswapV2Router01(systemContract.uniswapv2Router02Address())
@@ -115,7 +115,8 @@ library SwapHelperLib {
         uint256 amount,
         address targetZRC20,
         uint256 amountInMax,
-        uint32 slippage
+        uint32 slippage,
+        uint32 MAX_DEADLINE
     ) internal returns (uint256) {
         bool existsPairPool = _existsPairPool(systemContract.uniswapv2FactoryAddress(), zrc20, targetZRC20);
 
@@ -130,8 +131,7 @@ library SwapHelperLib {
             path[1] = systemContract.wZetaContractAddress();
             path[2] = targetZRC20;
         }
-
-        amountInMax = calculateMaximumInputAmount(amount, path, slippage);
+        amountInMax = calculateMaximumInputAmount(amount, path, slippage, systemContract.uniswapv2Router02Address());
 
         IZRC20(zrc20).approve(address(systemContract.uniswapv2Router02Address()), amountInMax);
         uint256[] memory amounts = IUniswapV2Router01(systemContract.uniswapv2Router02Address())
