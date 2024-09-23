@@ -11,6 +11,7 @@ import "libraries/zetaV2/interfaces/IZRC20.sol";
 import "libraries/zetaV2/interfaces/IWZETA.sol";
 import "libraries/TransferHelper.sol";
 import "libraries/error/Errors.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 
 /*
 
@@ -41,7 +42,7 @@ import "libraries/error/Errors.sol";
  * @author KYEX-TEAM
  * @notice KYEX Mainnet ZETACHAIN zrcSwap Smart Contract V1
  */
-contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
+contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable {
     ///////////////////
     // State Variables
     ///////////////////
@@ -82,6 +83,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         uint16 _MAX_SLIPPAGE
     ) external initializer {
         __Ownable_init();
+        __Pausable_init();
 
         WZETA = _WZETA; //Note: when deploying on the mainnet，this line should be deleted.
         UniswapRouter = _UniswapRouter;
@@ -91,6 +93,24 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         platformFee = _platformFee;
         MAX_SLIPPAGE = _MAX_SLIPPAGE;
         volume = 0;
+    }
+
+    ///////////////////
+    // Public Function
+    ///////////////////
+
+    /**
+     * @dev Pause contract trading（only owner）
+     */
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @dev unpause contract trading（only owner）
+     */
+    function unpause() public onlyOwner {
+        _unpause();
     }
 
     ///////////////////
@@ -132,7 +152,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         bytes memory btcRecipient,
         uint16 slippageTolerance,
         bool isCrossChain
-    ) external payable {
+    ) external payable whenNotPaused {
         uint256 amountOut;
         address gasZRC20;
 
@@ -163,14 +183,14 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
             amountOut = swapTokens(tokenInOfZetaChain, tokenOutOfZetaChain, amountIn, isWrap, slippageTolerance);
 
             if (tokenOutOfZetaChain == WZETA) {
-                transferZETA(tokenOutOfZetaChain, msg.sender, amountOut, isWrap);
+                transferTokens(tokenOutOfZetaChain, msg.sender, amountOut, isWrap);
             } else if (tokenOutOfZetaChain == BITCOIN) {
-                withdrawBTC(tokenOutOfZetaChain, btcRecipient, amountOut);
+                withdrawOther(tokenOutOfZetaChain, btcRecipient, amountOut);
             } else if (tokenOutOfZetaChain == gasZRC20) {
                 if (isCrossChain == true) {
-                    withdrawToken(tokenOutOfZetaChain, msg.sender, amountOut);
+                    withdrawOther(tokenOutOfZetaChain, abi.encodePacked(msg.sender), amountOut);
                 } else {
-                    transferZRC(tokenOutOfZetaChain, msg.sender, amountOut);
+                    transferTokens(tokenOutOfZetaChain, msg.sender, amountOut, true);
                 }
             }
         }
@@ -198,7 +218,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
     /**
      * @dev Calculate trading volume and standardize tokenIn to WZETA
      */
-    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256 amount) {
+    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal view returns (uint256 amount) {
         (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
         amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
     }
@@ -212,7 +232,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         returns (uint256)
     {
         uint256[] memory amountsOut = IUniswapV2Router02(UniswapRouter).getAmountsOut(amountIn, path);
-        return amountsOut[amountsOut.length - 1] * (1000 - slippageTolerance) / (1000);
+        return amountsOut[amountsOut.length - 1] * (1000 - slippageTolerance) / 1000;
     }
 
     /**
@@ -226,11 +246,6 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         uint256[] memory amountsIn = IUniswapV2Router02(UniswapRouter).getAmountsIn(amountOut, path);
         return amountsIn[0] * (1000 + slippageTolerance) / 1000;
     }
-
-    // function checkPairExists(address tokenA, address tokenB) internal view returns (bool) {
-    //     address pairAddress = IUniswapV2Factory(UniswapFactory).getPair(tokenA, tokenB);
-    //     return pairAddress != address(0); // True if the pair exists, false otherwise
-    // }
 
     function sendZETA(address tokenA, uint256 amount, bool isWrap) internal returns (uint256) {
         if (tokenA != WZETA) revert Errors.OnlySupportZETA();
@@ -319,10 +334,10 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         uint256 newAmount,
         uint256 slippageTolerance
     ) internal returns (uint256) {
-        address[] memory path;
+        address[] memory path = new address[](2);
+
         if (isWithdraw == true) {
             // Swap WZETA to gasZRC20 for the gas fee
-            path = new address[](2);
             path[0] = WZETA;
             path[1] = gasZRC20;
 
@@ -339,53 +354,78 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
             uint256 remainingAmount = IWETH9(WZETA).balanceOf(address(this));
 
             // Swap remaining WZETA to tokenB
-            path = new address[](2);
             path[0] = WZETA;
             path[1] = tokenB;
 
-            uint256[] memory amountOut = IUniswapV2Router02(UniswapRouter).swapExactTokensForTokens(
-                remainingAmount,
-                calculateMinimumOutputAmount(remainingAmount, path, slippageTolerance),
-                path,
-                address(this),
-                block.timestamp + MAX_DEADLINE
-            );
-            if (amountOut[1] == 0) revert Errors.SwapFailed();
-
-            uint256 feeAmount = amountOut[1] * platformFee / 10000;
-            newAmount = amountOut[1] - feeAmount;
-
-            if (feeAmount > 0) {
-                TransferHelper.safeTransfer(tokenB, kyexTreasury, feeAmount);
-            }
+            newAmount = handleExactTokensForTokens(remainingAmount, path, MAX_DEADLINE, slippageTolerance);
 
             IZRC20(gasZRC20).approve(tokenB, gasFee);
             IZRC20(tokenB).withdraw(abi.encodePacked(msg.sender), newAmount);
+            // uint256[] memory amountOut = IUniswapV2Router02(UniswapRouter).swapExactTokensForTokens(
+            //     remainingAmount,
+            //     calculateMinimumOutputAmount(remainingAmount, path, slippageTolerance),
+            //     path,
+            //     address(this),
+            //     block.timestamp + MAX_DEADLINE
+            // );
+            // if (amountOut[1] == 0) revert Errors.SwapFailed();
+
+            // uint256 feeAmount = amountOut[1] * platformFee / 10000;
+            // newAmount = amountOut[1] - feeAmount;
+
+            // if (feeAmount > 0) {
+            //     TransferHelper.safeTransfer(tokenB, kyexTreasury, feeAmount);
+            // }
         } else {
             // Swap remaining WZETA to tokenB
-            path = new address[](2);
             path[0] = WZETA;
             path[1] = tokenB;
 
-            uint256[] memory amountOut = IUniswapV2Router02(UniswapRouter).swapExactTokensForTokens(
-                newAmount,
-                calculateMinimumOutputAmount(newAmount, path, slippageTolerance),
-                path,
-                address(this),
-                block.timestamp + MAX_DEADLINE
-            );
-            if (amountOut[1] == 0) revert Errors.SwapFailed();
-
-            uint256 feeAmount = amountOut[1] * platformFee / 10000;
-            newAmount = amountOut[1] - feeAmount;
-
-            if (feeAmount > 0) {
-                TransferHelper.safeTransfer(tokenB, kyexTreasury, feeAmount);
-            }
-
+            newAmount = handleExactTokensForTokens(newAmount, path, MAX_DEADLINE, slippageTolerance);
             TransferHelper.safeTransfer(tokenB, msg.sender, newAmount);
-        }
 
+            // uint256[] memory amountOut = IUniswapV2Router02(UniswapRouter).swapExactTokensForTokens(
+            //     newAmount,
+            //     calculateMinimumOutputAmount(newAmount, path, slippageTolerance),
+            //     path,
+            //     address(this),
+            //     block.timestamp + MAX_DEADLINE
+            // );
+            // if (amountOut[1] == 0) revert Errors.SwapFailed();
+
+            // uint256 feeAmount = amountOut[1] * platformFee / 10000;
+            // newAmount = amountOut[1] - feeAmount;
+
+            // if (feeAmount > 0) {
+            //     TransferHelper.safeTransfer(tokenB, kyexTreasury, feeAmount);
+            // }
+
+            // TransferHelper.safeTransfer(tokenB, msg.sender, newAmount);
+        }
+        return newAmount;
+    }
+
+    function handleExactTokensForTokens(
+        uint256 amountIn,
+        address[] memory path,
+        uint256 deadline,
+        uint256 slippageTolerance
+    ) internal returns (uint256) {
+        uint256[] memory amountOut = IUniswapV2Router02(UniswapRouter).swapExactTokensForTokens(
+            amountIn,
+            calculateMinimumOutputAmount(amountIn, path, slippageTolerance),
+            path,
+            address(this),
+            block.timestamp + deadline
+        );
+        if (amountOut[1] == 0) revert Errors.SwapFailed();
+
+        uint256 feeAmount = amountOut[1] * platformFee / 10000;
+        uint256 newAmount = amountOut[1] - feeAmount;
+
+        if (feeAmount > 0) {
+            TransferHelper.safeTransfer(path[1], kyexTreasury, feeAmount);
+        }
         return newAmount;
     }
 
@@ -476,7 +516,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         return newAmount;
     }
 
-    function withdrawBTC(address token, bytes memory recipient, uint256 amount) internal {
+    function withdrawOther(address token, bytes memory recipient, uint256 amount) internal {
         (address gasZRC20, uint256 gasFee) = IZRC20(token).withdrawGasFee();
         if (IZRC20(gasZRC20).balanceOf(address(this)) < gasFee) revert Errors.InsufficientFunds();
 
@@ -486,36 +526,50 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable {
         IZRC20(token).withdraw(recipient, amount - gasFee);
     }
 
-    function withdrawToken(address token, address recipient, uint256 amount) internal {
-        (address gasZRC20, uint256 gasFee) = IZRC20(token).withdrawGasFee();
-        IZRC20(gasZRC20).approve(token, gasFee);
-        IZRC20(token).withdraw(abi.encodePacked(recipient), amount - gasFee);
-    }
+    // function withdrawToken(address token, address recipient, uint256 amount) internal {
+    //     (address gasZRC20, uint256 gasFee) = IZRC20(token).withdrawGasFee();
+    //     IZRC20(gasZRC20).approve(token, gasFee);
+    //     IZRC20(token).withdraw(abi.encodePacked(recipient), amount - gasFee);
+    // }
 
-    function transferZETA(address token, address recipient, uint256 amount, bool isWrap) internal {
+    function transferTokens(address tokenAddress, address recipient, uint256 amount, bool isWrap) internal {
         if (!isWrap) {
             // Withdraw WETH to ETH
-            IWETH9(token).withdraw(amount);
-
+            IWETH9(tokenAddress).withdraw(amount);
             // Send ETH to recipient
             (bool sent,) = recipient.call{value: amount}("");
             if (!sent) revert Errors.TransferFailed();
         } else {
-            // Transfer WETH to recipient
-            // IWETH9(token).transfer(recipient, amount);
-
-            TransferHelper.safeTransfer(token, recipient, amount);
+            if (amount == 0) revert Errors.TransferFailed();
+            TransferHelper.safeTransfer(tokenAddress, recipient, amount);
         }
-
         emit TokenTransfer(recipient, amount);
     }
 
-    function transferZRC(address tokenAddress, address recipient, uint256 amount) internal {
-        if (amount == 0) revert Errors.TransferFailed();
-        TransferHelper.safeTransfer(tokenAddress, recipient, amount);
+    //     function transferZETA(address token, address recipient, uint256 amount, bool isWrap) internal {
+    //     if (!isWrap) {
+    //         // Withdraw WETH to ETH
+    //         IWETH9(token).withdraw(amount);
 
-        emit TokenTransfer(recipient, amount);
-    }
+    //         // Send ETH to recipient
+    //         (bool sent,) = recipient.call{value: amount}("");
+    //         if (!sent) revert Errors.TransferFailed();
+    //     } else {
+    //         // Transfer WETH to recipient
+    //         // IWETH9(token).transfer(recipient, amount);
+
+    //         TransferHelper.safeTransfer(token, recipient, amount);
+    //     }
+
+    //     emit TokenTransfer(recipient, amount);
+    // }
+
+    // function transferZRC(address tokenAddress, address recipient, uint256 amount) internal {
+    //     if (amount == 0) revert Errors.TransferFailed();
+    //     TransferHelper.safeTransfer(tokenAddress, recipient, amount);
+
+    //     emit TokenTransfer(recipient, amount);
+    // }
 
     ///////////////////
     // receive

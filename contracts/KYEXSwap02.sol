@@ -10,6 +10,7 @@ import "libraries/TransferHelper.sol";
 import "libraries/BytesHelperLib.sol";
 import "libraries/zetaV2/interfaces/IWZETA.sol";
 import "libraries/error/Errors.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 
 /*
 
@@ -40,7 +41,7 @@ import "libraries/error/Errors.sol";
  * @author KYEX-TEAM
  * @notice KYEX Mainnet Main kyexSwap Smart Contract V1
  */
-contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
+contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable {
     ///////////////////
     // Struct
     ///////////////////
@@ -110,6 +111,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         address _systemContract
     ) external initializer {
         __Ownable_init();
+        __Pausable_init();
 
         WZETA = _WZETA; //Note: when deploying on the mainnet，this line should be deleted.
         kyexTreasury = _kyexTreasury;
@@ -125,46 +127,17 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////
 
     /**
-     * @return WZETA address
-     * @notice when deploying on the mainnet, this function should be deleted
+     * @dev Pause contract trading（only owner）
      */
-    function getWZETA() public view returns (address) {
-        return WZETA;
+    function pause() public onlyOwner {
+        _pause();
     }
 
     /**
-     * @return Treasury Address
+     * @dev unpause contract trading（only owner）
      */
-    function getTreasuryAddress() public view returns (address) {
-        return kyexTreasury;
-    }
-
-    /**
-     * @return Platform Fee
-     */
-    function getPlatformFee() public view returns (uint16) {
-        return platformFee;
-    }
-
-    /**
-     * @return MAX DEADLINE
-     */
-    function getMaxDeadLine() public view returns (uint32) {
-        return MAX_DEADLINE;
-    }
-
-    /**
-     * @return MAX SLIPPAGE
-     */
-    function getMaxSlippage() public view returns (uint16) {
-        return MAX_SLIPPAGE;
-    }
-
-    /**
-     * @return SystemContract address
-     */
-    function getSystemContract() public view returns (address) {
-        return address(systemContract);
+    function unpause() public onlyOwner {
+        _unpause();
     }
 
     ///////////////////
@@ -211,6 +184,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
         external
         override
         onlySystem(systemContract)
+        whenNotPaused
     {
         (
             uint32 isWithdraw,
@@ -257,6 +231,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
                     );
                 }
             }
+            (zrc20 == WZETA) ? volume += amount : volume += getZetaQuote(zrc20, WZETA, amount);
 
             emit SwapExecuted(newAmount, targetTokenAddress, address(uint160(bytes20(recipientAddress))));
             emit DebugInfo(
@@ -268,8 +243,6 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
                 newAmount
             );
         }
-
-        getZetaQuote(zrc20, WZETA, amount);
     }
 
     function updateTreasuryAddress(address _newAddress) external onlyOwner {
@@ -303,15 +276,10 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable {
     /**
      * @dev Calculate trading volume and standardize tokenIn to WZETA
      */
-    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal {
-        if (tokenIn == WZETA) {
-            volume += amountIn;
-        } else {
-            address UniswapV2FactoryAddr = systemContract.uniswapv2FactoryAddress();
-            (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapV2FactoryAddr, tokenIn, tokenOut);
-            uint256 amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
-            volume += amount;
-        }
+    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal view returns (uint256 amount) {
+        (uint256 reserveA, uint256 reserveB) =
+            UniswapV2Library.getReserves(systemContract.uniswapv2FactoryAddress(), tokenIn, tokenOut);
+        amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
     }
 
     function depositZRC(address tokenAddress, uint256 amount, address recipientAddress) internal {
