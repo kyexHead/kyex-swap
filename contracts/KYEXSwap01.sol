@@ -55,7 +55,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
     uint32 private MAX_DEADLINE;
     uint16 private MAX_SLIPPAGE;
     uint256 public volume;
-    uint16 public platformFee;
+    uint16 private platformFee;
 
     ///////////////////
     // Events
