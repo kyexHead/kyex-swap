@@ -244,6 +244,14 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
             (zrc20 == WZETA) ? volume += amount : volume += getZetaQuote(zrc20, WZETA, amount);
 
             emit SwapExecuted(newAmount, targetTokenAddress, address(uint160(bytes20(recipientAddress))));
+            emit DebugInfo(
+                "Swapped",
+                targetTokenAddress,
+                bytesToAddress(recipientAddress, 0),
+                swapAmounts.gasFee,
+                swapAmounts.inputForGas,
+                newAmount
+            );
         }
     }
 
@@ -336,37 +344,10 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
     }
 
     function transferZRC20(address tokenAddress, uint256 amount, address recipient) internal {
-        (address gasZRC20, uint256 gasFee) = IZRC20(tokenAddress).withdrawGasFee();
-        IZRC20(gasZRC20).approve(tokenAddress, gasFee);
+        if (amount == 0) revert Errors.InsufficientFunds();
         IZRC20 token = IZRC20(tokenAddress);
         token.transfer(recipient, amount);
         emit WrappedTokenTransfer(amount, recipient);
-    }
-
-    function transferERC20(
-        address zrc20,
-        address targetTokenAddress,
-        uint256 amount,
-        bytes memory recipientAddress,
-        uint32 slippage
-    ) internal {
-        uint256 outputAmount = SwapHelperLib.swapExactTokensForTokens(
-            systemContract, zrc20, amount, targetTokenAddress, 0, slippage, MAX_DEADLINE
-        );
-        if (outputAmount == 0) revert Errors.SwapFailed();
-        if (!IZRC20(targetTokenAddress).approve(targetTokenAddress, outputAmount)) revert Errors.ApprovalFailed();
-
-        uint256 feeAmount = outputAmount * platformFee / 10000;
-        uint256 newAmount = outputAmount - feeAmount;
-
-        if (feeAmount > 0) {
-            TransferHelper.safeTransfer(targetTokenAddress, kyexTreasury, feeAmount);
-        }
-
-        bool transferSuccess = IZRC20(targetTokenAddress).transfer(bytesToAddress(recipientAddress, 0), newAmount);
-        if (!transferSuccess) revert Errors.TransferFailed();
-
-        emit WrappedTokenTransfer(amount, address(uint160(bytes20(recipientAddress))));
     }
 
     function bytesToAddress(bytes memory data, uint256 offset) internal pure returns (address output) {
