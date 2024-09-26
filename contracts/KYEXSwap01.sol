@@ -207,6 +207,10 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         kyexTreasury = _newAddress;
     }
 
+    function getPlatformFee() external view returns (uint256) {
+        return platformFee;
+    }
+
     ///////////////////
     // Internal Function
     ///////////////////

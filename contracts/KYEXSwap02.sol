@@ -255,7 +255,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
         }
     }
 
-    function getPlatformFee() public view returns (uint256) {
+    function getPlatformFee() external view returns (uint256) {
         return platformFee;
     }
 
