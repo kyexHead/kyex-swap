@@ -244,14 +244,6 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
             (zrc20 == WZETA) ? volume += amount : volume += getZetaQuote(zrc20, WZETA, amount);
 
             emit SwapExecuted(newAmount, targetTokenAddress, address(uint160(bytes20(recipientAddress))));
-            emit DebugInfo(
-                "Swapped",
-                targetTokenAddress,
-                bytesToAddress(recipientAddress, 0),
-                swapAmounts.gasFee,
-                swapAmounts.inputForGas,
-                newAmount
-            );
         }
     }
 
