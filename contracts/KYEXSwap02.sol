@@ -208,7 +208,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
         ) = decodeMessage(message, context.chainID);
 
         // FOR SOLANA DEPOSIT METHOD
-        if (isWithdraw == 3) {
+        if (isWithdraw == 4) {
             //Deposit ZRC20 token
             depositZRC(zrc20, amount, address(uint160(bytes20(recipientAddress))));
         } else {
