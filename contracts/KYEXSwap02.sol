@@ -82,7 +82,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
         uint256 inputForGas,
         uint256 outputAmount
     );
-    event ZETAWithdrawn(address indexed owner, uint256 amount);
+    event ZETAWithdrawn(address indexed owner, uint256 zetaAmount, uint256 wzetaAmount);
     event TokenWithdrawn(address indexed token, address indexed treasury, uint256 amount);
 
     ///////////////////
@@ -148,22 +148,36 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
      * @dev Withdraw ZETA from the contract, only the owner can execute this operation
      */
     function withdrawZETA() external onlyOwner {
-        uint256 balance = address(this).balance;
-        if (balance == 0) revert Errors.InsufficientFunds();
-        (bool success,) = owner().call{value: balance}("");
-        if (!success) revert Errors.TransferFailed();
-        emit ZETAWithdrawn(owner(), balance);
+        uint256 zetaBalance = address(this).balance;
+        uint256 wzetaBalance = IWETH9(WZETA).balanceOf(address(this));
+
+        // Check for insufficient funds after the transfer
+        if (zetaBalance == 0 && wzetaBalance == 0) revert Errors.InsufficientFunds(); 
+        
+        // 1. Transfer tZETA
+        if (zetaBalance > 0) {
+            (bool zetaTransferSuccess, ) = kyexTreasury.call{value: zetaBalance}("");
+            if (!zetaTransferSuccess) revert Errors.TransferFailed();
+        }
+
+        // 2. Transfer wZETA (if applicable)
+        if (wzetaBalance > 0) {
+            IWETH9(WZETA).transfer(kyexTreasury, wzetaBalance);
+        }
+
+        emit ZETAWithdrawn(kyexTreasury, zetaBalance, wzetaBalance);
     }
 
     /**
-     * @dev Withdraw ZRC20 token from the contract, only the owner can execute this operation
+     * @dev Withdraw ZRC token from the contract, only the owner can execute this operation
      */
-    function withdrawZRCToken(address tokenAddress, address recipient) external onlyOwner {
-        uint256 balance = IZRC20(tokenAddress).balanceOf(address(this));
-        if (balance == 0) revert Errors.InsufficientFunds();
-
-        IZRC20(tokenAddress).transfer(recipient, balance);
-        emit TokenWithdrawn(tokenAddress, recipient, balance);
+    function withdrawZRCTokens(address tokenAddress) external onlyOwner {
+        uint256 zrc20Balance = IZRC20(tokenAddress).balanceOf(address(this));
+        if (zrc20Balance == 0) revert Errors.InsufficientFunds();
+        if (zrc20Balance > 0) {
+            IZRC20(tokenAddress).transfer(kyexTreasury, zrc20Balance);
+        }
+        emit TokenWithdrawn(tokenAddress, kyexTreasury, zrc20Balance);
     }
 
     /**
@@ -190,17 +204,11 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
             uint32 isWithdraw,
             uint32 slippage,
             address targetTokenAddress,
-            address sameNetworkAddress,
             bytes memory recipientAddress
         ) = decodeMessage(message, context.chainID);
 
-        if (isWithdraw == 0) {
-            //Same-network swap
-            sameNetworkSwap(zrc20, sameNetworkAddress, amount, recipientAddress, slippage);
-        } else if (isWithdraw == 3) {
-            //Unwrap and transfer (for WZETA)
-            transferERC20(zrc20, targetTokenAddress, amount, recipientAddress, slippage);
-        } else if (isWithdraw == 4) {
+        // FOR SOLANA DEPOSIT METHOD
+        if (isWithdraw == 3) {
             //Deposit ZRC20 token
             depositZRC(zrc20, amount, address(uint160(bytes20(recipientAddress))));
         } else {
@@ -209,7 +217,9 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
             uint256 feeAmount = swapAmounts.outputAmount * platformFee / 10000;
             uint256 newAmount = swapAmounts.outputAmount - feeAmount;
 
-            TransferHelper.safeTransfer(targetTokenAddress, kyexTreasury, feeAmount);
+            if (feeAmount > 0) {
+                TransferHelper.safeTransfer(targetTokenAddress, kyexTreasury, feeAmount);
+            }
 
             address recipient = address(uint160(bytes20(recipientAddress)));
             //targetToken is ZETA
@@ -243,6 +253,10 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
                 newAmount
             );
         }
+    }
+
+    function getPlatformFee() public view returns (uint256) {
+        return platformFee;
     }
 
     function updateTreasuryAddress(address _newAddress) external onlyOwner {
@@ -292,6 +306,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
     }
 
     function wrapAndTransfer(address wzeta, uint256 amount, address recipient) internal {
+        // Transfer Wrap ZETA
         IWETH9(wzeta).transfer(recipient, amount);
         emit WrappedTokenTransfer(amount, recipient);
     }
@@ -352,46 +367,14 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
         uint256 feeAmount = outputAmount * platformFee / 10000;
         uint256 newAmount = outputAmount - feeAmount;
 
-        TransferHelper.safeTransfer(targetTokenAddress, kyexTreasury, feeAmount);
+        if (feeAmount > 0) {
+            TransferHelper.safeTransfer(targetTokenAddress, kyexTreasury, feeAmount);
+        }
 
         bool transferSuccess = IZRC20(targetTokenAddress).transfer(bytesToAddress(recipientAddress, 0), newAmount);
         if (!transferSuccess) revert Errors.TransferFailed();
 
         emit WrappedTokenTransfer(amount, address(uint160(bytes20(recipientAddress))));
-    }
-
-    function sameNetworkSwap(
-        address zrc20,
-        address sameNetworkTokenAddress,
-        uint256 amount,
-        bytes memory recipientAddress,
-        uint32 slippage
-    ) internal {
-        if (amount == 0) revert Errors.NeedsMoreThanZero();
-        if (slippage > MAX_SLIPPAGE) revert Errors.SlippageToleranceExceedsMaximum();
-
-        (address gasZRC20, uint256 gasFee) = IZRC20(sameNetworkTokenAddress).withdrawGasFee();
-        // swap WZETA
-        uint256 outputAmount =
-            SwapHelperLib.swapExactTokensForTokens(systemContract, zrc20, amount, WZETA, 0, slippage, MAX_DEADLINE);
-        uint256 inputForGas = SwapHelperLib.swapTokensForExactTokens(
-            systemContract, WZETA, gasFee, gasZRC20, outputAmount, slippage, MAX_DEADLINE
-        );
-        uint256 remainingAmount = IWETH9(WZETA).balanceOf(address(this));
-        if (inputForGas == 0) revert Errors.SwapFailed();
-
-        uint256 finalAmount = SwapHelperLib.swapExactTokensForTokens(
-            systemContract, WZETA, remainingAmount, sameNetworkTokenAddress, 0, slippage, MAX_DEADLINE
-        );
-        // uint256 feeAmount = finalAmount.mul(platformFee).div(10000);
-        // uint256 newAmount = finalAmount.sub(feeAmount);
-
-        // TransferHelper.safeTransfer(sameNetworkTokenAddress, kyexTreasury, feeAmount);
-
-        IZRC20(gasZRC20).approve(sameNetworkTokenAddress, gasFee);
-        IZRC20(sameNetworkTokenAddress).withdraw(recipientAddress, finalAmount);
-
-        emit TokenWithdrawal(amount, recipientAddress);
     }
 
     function bytesToAddress(bytes memory data, uint256 offset) internal pure returns (address output) {
@@ -411,7 +394,6 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
             uint32 isWithdraw,
             uint32 slippage,
             address targetTokenAddress,
-            address sameNetworkTokenAddress,
             bytes memory recipientAddress
         )
     {
@@ -419,18 +401,15 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
             isWithdraw = BytesHelperLib.bytesToUint32(message, 3);
             slippage = BytesHelperLib.bytesToUint32(message, 7);
             targetTokenAddress = BytesHelperLib.bytesToAddress(message, 8);
-            sameNetworkTokenAddress = BytesHelperLib.bytesToAddress(message, 28);
-            recipientAddress = abi.encodePacked(BytesHelperLib.bytesToAddress(message, 48));
+            recipientAddress = abi.encodePacked(BytesHelperLib.bytesToAddress(message, 28));
         } else {
             (
                 uint32 _isWithdraw,
                 uint32 _slippage,
                 address targetToken,
-                address sameNetworkToken,
                 bytes memory recipient
-            ) = abi.decode(message, (uint32, uint32, address, address, bytes));
+            ) = abi.decode(message, (uint32, uint32, address, bytes));
             targetTokenAddress = targetToken;
-            sameNetworkTokenAddress = sameNetworkToken;
             recipientAddress = recipient;
             isWithdraw = _isWithdraw;
             slippage = _slippage;
