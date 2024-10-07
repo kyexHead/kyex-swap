@@ -15,4 +15,8 @@ library Errors {
     error SlippageToleranceExceedsMaximum();
     error PlatformFeeNeedslessThanOneHundredPercent();
     error IncorrectAmountOfZETASent();
+    error ErrorTransferringZeta();
+    error ChainIdAlreadyEnabled();
+    error ChainIdNotAvailable();
+    error InvalidZetaValueAndGas();
 }

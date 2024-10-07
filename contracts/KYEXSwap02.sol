@@ -120,6 +120,8 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
         MAX_SLIPPAGE = _MAX_SLIPPAGE;
         systemContract = SystemContract(_systemContract);
         volume = 0;
+
+        Initializable._disableInitializers(); 
     }
 
     ///////////////////
@@ -162,7 +164,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
 
         // 2. Transfer wZETA (if applicable)
         if (wzetaBalance > 0) {
-            IWETH9(WZETA).transfer(kyexTreasury, wzetaBalance);
+            TransferHelper.safeTransfer(WZETA, kyexTreasury, wzetaBalance);
         }
 
         emit ZETAWithdrawn(kyexTreasury, zetaBalance, wzetaBalance);
@@ -175,7 +177,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
         uint256 zrc20Balance = IZRC20(tokenAddress).balanceOf(address(this));
         if (zrc20Balance == 0) revert Errors.InsufficientFunds();
         if (zrc20Balance > 0) {
-            IZRC20(tokenAddress).transfer(kyexTreasury, zrc20Balance);
+            TransferHelper.safeTransfer(tokenAddress, kyexTreasury, zrc20Balance);
         }
         emit TokenWithdrawn(tokenAddress, kyexTreasury, zrc20Balance);
     }
@@ -297,17 +299,14 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
     }
 
     function depositZRC(address tokenAddress, uint256 amount, address recipientAddress) internal {
-        address recipient = address(uint160(bytes20(recipientAddress)));
-        bool transferSuccess = IZRC20(tokenAddress).transfer(recipient, amount);
-
-        require(transferSuccess, "Transfer Fail");
-        if (!transferSuccess) revert Errors.TransferFailed();
-        emit WrappedTokenTransfer(amount, recipient);
+        TransferHelper.safeTransfer(tokenAddress, recipientAddress, amount);
+        emit WrappedTokenTransfer(amount, recipientAddress);
     }
 
     function wrapAndTransfer(address wzeta, uint256 amount, address recipient) internal {
         // Transfer Wrap ZETA
-        IWETH9(wzeta).transfer(recipient, amount);
+        TransferHelper.safeTransfer(wzeta, recipient, amount);
+
         emit WrappedTokenTransfer(amount, recipient);
     }
 
@@ -315,7 +314,8 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
         // Unwrap wZETA to tZETA
         IWETH9(wzeta).withdraw(amount);
         // Transfer tZETA to recipient
-        payable(recipient).transfer(amount);
+        (bool success, ) = recipient.call{value: amount}("");
+        if (!success) revert Errors.TransferFailed();
 
         // Emit event for unwrapped transfer
         emit UnWrapZetaTokenTransfer(amount, recipient);
@@ -328,25 +328,15 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
         uint256 amount,
         bytes memory recipientAddress
     ) internal {
-        IZRC20(gasZRC).approve(tokenAddress, gas);
+        TransferHelper.safeApprove(gasZRC, tokenAddress, gas);
         IZRC20(tokenAddress).withdraw(recipientAddress, amount);
         emit TokenWithdrawal(amount, recipientAddress);
     }
 
-    function withdrawBTC(address token, bytes memory recipient, uint256 amount) internal {
-        (address gasZRC20, uint256 gasFee) = IZRC20(token).withdrawGasFee();
-        if (IZRC20(gasZRC20).balanceOf(address(this)) < gasFee) revert Errors.InsufficientGasForWithdraw();
-
-        IZRC20(gasZRC20).approve(token, gasFee);
-        IZRC20(token).withdraw(recipient, amount - gasFee);
-
-        emit TokenWithdrawal(amount, recipient);
-    }
-
     function transferZRC20(address tokenAddress, uint256 amount, address recipient) internal {
         if (amount == 0) revert Errors.InsufficientFunds();
-        IZRC20 token = IZRC20(tokenAddress);
-        token.transfer(recipient, amount);
+        TransferHelper.safeTransfer(tokenAddress, recipient, amount);
+
         emit WrappedTokenTransfer(amount, recipient);
     }
 
