@@ -121,7 +121,7 @@ contract KYEXSwap02 is zContract, UUPSUpgradeable, OwnableUpgradeable, PausableU
         systemContract = SystemContract(_systemContract);
         volume = 0;
 
-        Initializable._disableInitializers(); 
+        // Initializable._disableInitializers(); 
     }
 
     ///////////////////

@@ -68,7 +68,8 @@ describe("Test tokenOutOfZetaChain is not equals gasZRC20", function () {
       true,
       ethers.ZeroAddress,
       10,
-      false
+      false,
+      1
     );
     await expect(tx)
       .to.emit(KYEXSwap01Proxy, "TokenTransfer")
@@ -136,7 +137,8 @@ describe("Test tokenOutOfZetaChain is not equals gasZRC20", function () {
       true,
       ethers.ZeroAddress,
       10,
-      true
+      true,
+      1
     );
     await expect(tx)
       .to.emit(MockZRC20USDC, "Withdrawal")
@@ -189,7 +191,8 @@ describe("Test tokenOutOfZetaChain equals gasZRC20, but is not equals to WZETA o
       true,
       ethers.ZeroAddress,
       10,
-      false
+      false,
+      1
     );
     await expect(tx)
       .to.emit(KYEXSwap01Proxy, "PerformSwap")
@@ -241,7 +244,8 @@ describe("Test tokenOutOfZetaChain equals gasZRC20, but is not equals to WZETA o
       true,
       ethers.ZeroAddress,
       10,
-      true
+      true,
+      1
     );
     await expect(tx)
       .to.emit(KYEXSwap01Proxy, "PerformSwap")
@@ -292,7 +296,8 @@ describe("Test tokenOutOfZetaChain equals WZETA ", function () {
       true,
       ethers.ZeroAddress,
       10,
-      false
+      false,
+      1
     );
     await expect(tx)
       .to.emit(KYEXSwap01Proxy, "PerformSwap")
@@ -340,7 +345,8 @@ describe("Test tokenOutOfZetaChain equals WZETA ", function () {
       false,
       ethers.ZeroAddress,
       10,
-      false
+      false,
+      1
     );
     await expect(tx)
       .to.emit(KYEXSwap01Proxy, "PerformSwap")

@@ -12,9 +12,9 @@ import "libraries/zetaV2/interfaces/IWZETA.sol";
 import "libraries/TransferHelper.sol";
 import "libraries/error/Errors.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "libraries/zetaV2/Zeta.eth.sol";
-import "libraries/zetaV2/ZetaInteractor.sol";
-import "libraries/zetaV2/interfaces/ZetaInterfaces.sol";
+// import "libraries/zetaV2/Zeta.eth.sol";
+// import "libraries/zetaV2/ZetaInteractor.sol";
+// import "libraries/zetaV2/interfaces/ZetaInterfaces.sol";
 
 /*
 
@@ -59,7 +59,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
     uint16 private MAX_SLIPPAGE;
     uint256 public volume;
     uint16 private platformFee;
-    ZetaConnector public connector;
+    // ZetaConnector public connector;
 
     ///////////////////
     // Events
@@ -84,8 +84,8 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         address _kyexTreasury,
         uint32 _MAX_DEADLINE,
         uint16 _platformFee,
-        uint16 _MAX_SLIPPAGE,
-        address connectorAddress_
+        uint16 _MAX_SLIPPAGE
+        // address connectorAddress_
 
     ) external initializer {
         __Ownable_init();
@@ -99,7 +99,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         platformFee = _platformFee;
         MAX_SLIPPAGE = _MAX_SLIPPAGE;
         volume = 0;
-        connector = ZetaConnector(connectorAddress_);
+        // connector = ZetaConnector(connectorAddress_);
 
         // Initializable._disableInitializers(); 
     }
@@ -138,27 +138,27 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         return (reserveA, reserveB);
     }
 
-    /**
-     * @dev Transfer WZETA to other native chain.
-     */
-    function transferZETAout(
-        uint256 destinationChainId,
-        bytes memory destinationAddress,
-        uint256 destinationAmount
-    ) public payable {
+    // /**
+    //  * @dev Transfer WZETA to other native chain.
+    //  */
+    // function transferZETAout(
+    //     uint256 destinationChainId,
+    //     bytes memory destinationAddress,
+    //     uint256 destinationAmount
+    // ) public payable {
 
-        TransferHelper.safeApprove(WZETA, address(connector), destinationAmount);
-        connector.send(
-            ZetaInterfaces.SendInput({
-                destinationChainId: destinationChainId,
-                destinationAddress: destinationAddress,
-                destinationGasLimit: 300000,
-                message: abi.encode(),
-                zetaValueAndGas: destinationAmount,
-                zetaParams: abi.encode("")
-            })
-        );
-    }
+    //     TransferHelper.safeApprove(WZETA, address(connector), destinationAmount);
+    //     connector.send(
+    //         ZetaInterfaces.SendInput({
+    //             destinationChainId: destinationChainId,
+    //             destinationAddress: destinationAddress,
+    //             destinationGasLimit: 300000,
+    //             message: abi.encode(),
+    //             zetaValueAndGas: destinationAmount,
+    //             zetaParams: abi.encode("")
+    //         })
+    //     );
+    // }
 
     ///////////////////
     // External Function
@@ -540,7 +540,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
 
         // Transfer WZETA to other native network
         if (isCrossChain && tokenAddress == WZETA) {
-            transferZETAout(chainId, abi.encodePacked(recipient), newAmount);
+            // transferZETAout(chainId, abi.encodePacked(recipient), newAmount);
         } else if (isWrap) {
             if (newAmount == 0) revert Errors.TransferFailed();
             TransferHelper.safeTransfer(tokenAddress, recipient, newAmount);
