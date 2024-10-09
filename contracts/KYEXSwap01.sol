@@ -12,9 +12,10 @@ import "libraries/zetaV2/interfaces/IWZETA.sol";
 import "libraries/TransferHelper.sol";
 import "libraries/error/Errors.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-// import "libraries/zetaV2/Zeta.eth.sol";
-// import "libraries/zetaV2/ZetaInteractor.sol";
-// import "libraries/zetaV2/interfaces/ZetaInterfaces.sol";
+
+import "libraries/zetaV2/Zeta.eth.sol";
+import "libraries/zetaV2/ZetaInteractor.sol";
+import "libraries/zetaV2/interfaces/ZetaInterfaces.sol";
 
 /*
 
@@ -45,27 +46,44 @@ import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
  * @author KYEX-TEAM
  * @notice KYEX Mainnet ZETACHAIN zrcSwap Smart Contract V1
  */
-contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable {
+contract KYEXSwap01 is
+    UUPSUpgradeable,
+    OwnableUpgradeable,
+    PausableUpgradeable
+{
     ///////////////////
     // State Variables
     ///////////////////
     address private WZETA; // Note:when deploying on the mainnet，This should be changed to 【 address public constant WZETA = 0x5F0b1a82749cb4E2278EC87F8BF6B618dC71a8bf; 】
-    address public constant BITCOIN = 0x13A0c5930C028511Dc02665E7285134B6d11A5f4; // Note:when deploying on the testnet，This should be changed to 【 address public constant BITCOIN = 0x65a45c57636f9BcCeD4fe193A602008578BcA90b; 】
+    address private constant BITCOIN =
+        0x13A0c5930C028511Dc02665E7285134B6d11A5f4; // Note:when deploying on the testnet，This should be changed to 【 address public constant BITCOIN = 0x65a45c57636f9BcCeD4fe193A602008578BcA90b; 】
 
     address private UniswapRouter;
     address private UniswapFactory;
     address private kyexTreasury;
     uint32 private MAX_DEADLINE;
     uint16 private MAX_SLIPPAGE;
+    ZetaConnector private connector;
+
+    uint16 public platformFee;
     uint256 public volume;
-    uint16 private platformFee;
-    // ZetaConnector public connector;
 
     ///////////////////
     // Events
     ///////////////////
-    event SwapExecuted(address indexed sender, address tokenA, address tokenB, uint256 amountA, uint256 amountB);
-    event PerformSwap(address tokenA, address tokenB, uint256 amountIn, uint256 amountOut);
+    event SwapExecuted(
+        address indexed sender,
+        address tokenA,
+        address tokenB,
+        uint256 amountA,
+        uint256 amountB
+    );
+    event PerformSwap(
+        address tokenA,
+        address tokenB,
+        uint256 amountIn,
+        uint256 amountOut
+    );
     event ZETAWrapped(address indexed sender, uint256 amount);
     event TokenTransfer(address indexed sender, uint256 amount);
     event ZETAWithdrawn(address indexed owner, uint256 amount);
@@ -77,16 +95,15 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
     /**
      * @notice To Iinitialize contract after deployed.
      */
-    function initialize(   
+    function initialize(
         address _WZETA, //Note: when deploying on the mainnet，this line should be deleted.
         address _UniswapRouter,
         address _UniswapFactory,
         address _kyexTreasury,
         uint32 _MAX_DEADLINE,
         uint16 _platformFee,
-        uint16 _MAX_SLIPPAGE
-        // address connectorAddress_
-
+        uint16 _MAX_SLIPPAGE,
+        address connectorAddress_
     ) external initializer {
         __Ownable_init();
         __Pausable_init();
@@ -99,9 +116,9 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         platformFee = _platformFee;
         MAX_SLIPPAGE = _MAX_SLIPPAGE;
         volume = 0;
-        // connector = ZetaConnector(connectorAddress_);
+        connector = ZetaConnector(connectorAddress_);
 
-        // Initializable._disableInitializers(); 
+        Initializable._disableInitializers();
     }
 
     ///////////////////
@@ -123,42 +140,29 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
     }
 
     /**
-     * @dev To check for existing pairing
+     * @dev Transfer WZETA to other native chain.
      */
-    function checkPairExists(address tokenA, address tokenB) public view returns (bool) {
-        address pairAddress = IUniswapV2Factory(UniswapFactory).getPair(tokenA, tokenB);
-        return pairAddress != address(0); // True if the pair exists, false otherwise
+    function transferZETAout(
+        uint256 destinationChainId,
+        bytes memory destinationAddress,
+        uint256 destinationAmount
+    ) public payable {
+        TransferHelper.safeApprove(
+            WZETA,
+            address(connector),
+            destinationAmount
+        );
+        connector.send(
+            ZetaInterfaces.SendInput({
+                destinationChainId: destinationChainId,
+                destinationAddress: destinationAddress,
+                destinationGasLimit: 300000,
+                message: abi.encode(),
+                zetaValueAndGas: destinationAmount,
+                zetaParams: abi.encode("")
+            })
+        );
     }
-
-    /**
-     * @dev To get reserves of the pairing pool
-     */
-    function getReserves(address tokenIn, address tokenOut) public view returns (uint, uint) {
-        (uint reserveA, uint reserveB)= UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
-        return (reserveA, reserveB);
-    }
-
-    // /**
-    //  * @dev Transfer WZETA to other native chain.
-    //  */
-    // function transferZETAout(
-    //     uint256 destinationChainId,
-    //     bytes memory destinationAddress,
-    //     uint256 destinationAmount
-    // ) public payable {
-
-    //     TransferHelper.safeApprove(WZETA, address(connector), destinationAmount);
-    //     connector.send(
-    //         ZetaInterfaces.SendInput({
-    //             destinationChainId: destinationChainId,
-    //             destinationAddress: destinationAddress,
-    //             destinationGasLimit: 300000,
-    //             message: abi.encode(),
-    //             zetaValueAndGas: destinationAmount,
-    //             zetaParams: abi.encode("")
-    //         })
-    //     );
-    // }
 
     ///////////////////
     // External Function
@@ -171,7 +175,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         uint256 balance = address(this).balance;
         if (balance == 0) revert Errors.InsufficientFunds();
 
-        (bool success,) = owner().call{value: balance}("");
+        (bool success, ) = owner().call{value: balance}("");
         if (!success) revert Errors.TransferFailed();
 
         emit ZETAWithdrawn(owner(), balance);
@@ -210,7 +214,7 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         //     2. tokenOutOfZetaChain = Zeta.ETH(ETH), gasZRC20 = Zeta.ETH(ETH)
         //
         if (tokenOutOfZetaChain != WZETA) {
-            (gasZRC20,) = IZRC20(tokenOutOfZetaChain).withdrawGasFee();
+            (gasZRC20, ) = IZRC20(tokenOutOfZetaChain).withdrawGasFee();
         } else {
             gasZRC20 = WZETA;
         }
@@ -218,31 +222,73 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         if (tokenOutOfZetaChain != gasZRC20 && tokenOutOfZetaChain != BITCOIN) {
             // tokenOutOfZetaChain is not equals to gasZRC20
             // eg: tokenOutOfZetaChain = Zeta.USDC(ETH), gasZRC20 = Zeta.ETH(ETH)
-            amountOut =
-                withdrawERC(tokenInOfZetaChain, tokenOutOfZetaChain, amountIn, isWrap, slippageTolerance, isCrossChain);
+            amountOut = withdrawERC(
+                tokenInOfZetaChain,
+                tokenOutOfZetaChain,
+                amountIn,
+                isWrap,
+                slippageTolerance,
+                isCrossChain
+            );
         } else {
             // tokenOutOfZetaChain is equals to gasZRC20
             // eg: 1. tokenOutOfZetaChain = Zeta.WZETA, gasZRC20 = Zeta.WZETA
             //     2. tokenOutOfZetaChain = Zeta.BTC, gasZRC20 = Zeta.BTC
             //     3. tokenOutOfZetaChain = Zeta.ETH(ETH), gasZRC20 = Zeta.ETH(ETH)
-            amountOut = swapTokens(tokenInOfZetaChain, tokenOutOfZetaChain, amountIn, isWrap, slippageTolerance);
+            amountOut = swapTokens(
+                tokenInOfZetaChain,
+                tokenOutOfZetaChain,
+                amountIn,
+                isWrap,
+                slippageTolerance
+            );
 
             if (tokenOutOfZetaChain == WZETA) {
-                transferTokens(tokenOutOfZetaChain, msg.sender, amountOut, isWrap, isCrossChain, chainId);
+                transferTokens(
+                    tokenOutOfZetaChain,
+                    msg.sender,
+                    amountOut,
+                    isWrap,
+                    isCrossChain,
+                    chainId
+                );
             } else if (tokenOutOfZetaChain == BITCOIN) {
-                withdrawOther(tokenOutOfZetaChain, btcRecipient, amountOut, isCrossChain);
+                withdrawOther(
+                    tokenOutOfZetaChain,
+                    btcRecipient,
+                    amountOut,
+                    isCrossChain
+                );
             } else if (tokenOutOfZetaChain == gasZRC20) {
-                withdrawOther(tokenOutOfZetaChain, abi.encodePacked(msg.sender), amountOut, isCrossChain); 
+                withdrawOther(
+                    tokenOutOfZetaChain,
+                    abi.encodePacked(msg.sender),
+                    amountOut,
+                    isCrossChain
+                );
             }
         }
-        (tokenInOfZetaChain == WZETA) ? volume += amountIn : volume += getZetaQuote(tokenInOfZetaChain, WZETA, amountIn);
-        emit SwapExecuted(msg.sender, tokenInOfZetaChain, tokenOutOfZetaChain, amountIn, amountOut);
+        (tokenInOfZetaChain == WZETA)
+            ? volume += amountIn
+            : volume += getZetaQuote(tokenInOfZetaChain, WZETA, amountIn);
+        emit SwapExecuted(
+            msg.sender,
+            tokenInOfZetaChain,
+            tokenOutOfZetaChain,
+            amountIn,
+            amountOut
+        );
     }
+
     /**
      * @dev update config
      */
 
-    function updateConfig(uint16 _slippage, uint16 _newFee, address _newAddress) external onlyOwner {
+    function updateConfig(
+        uint16 _slippage,
+        uint16 _newFee,
+        address _newAddress
+    ) external onlyOwner {
         MAX_SLIPPAGE = _slippage;
         platformFee = _newFee;
         kyexTreasury = _newAddress;
@@ -263,57 +309,81 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
     /**
      * @dev Calculate trading volume and standardize tokenIn to WZETA
      */
-    function getZetaQuote(address tokenIn, address tokenOut, uint256 amountIn) internal view returns (uint256 amount) {
-        (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(UniswapFactory, tokenIn, tokenOut);
+    function getZetaQuote(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn
+    ) internal view returns (uint256 amount) {
+        (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(
+            UniswapFactory,
+            tokenIn,
+            tokenOut
+        );
         amount = UniswapV2Library.quote(amountIn, reserveA, reserveB);
     }
 
     /**
      * @dev Helper functions to calculate minimum output amounts based on slippage tolerance
      */
-    function calculateMinimumOutputAmount(uint256 amountIn, address[] memory path, uint256 slippageTolerance)
-        internal
-        view
-        returns (uint256)
-    {
-        uint256[] memory amountsOut = IUniswapV2Router02(UniswapRouter).getAmountsOut(amountIn, path);
-        return amountsOut[amountsOut.length - 1] * (1000 - slippageTolerance) / 1000;
+    function calculateMinimumOutputAmount(
+        uint256 amountIn,
+        address[] memory path,
+        uint256 slippageTolerance
+    ) internal view returns (uint256) {
+        uint256[] memory amountsOut = IUniswapV2Router02(UniswapRouter)
+            .getAmountsOut(amountIn, path);
+        return
+            (amountsOut[amountsOut.length - 1] * (1000 - slippageTolerance)) /
+            1000;
     }
 
     /**
      * @dev Helper functions to calculate maximum input amounts based on slippage tolerance
      */
-    function calculateMaximumInputAmount(uint256 amountOut, address[] memory path, uint256 slippageTolerance)
-        internal
-        view
-        returns (uint256)
-    {
-        uint256[] memory amountsIn = IUniswapV2Router02(UniswapRouter).getAmountsIn(amountOut, path);
-        return amountsIn[0] * (1000 + slippageTolerance) / 1000;
+    function calculateMaximumInputAmount(
+        uint256 amountOut,
+        address[] memory path,
+        uint256 slippageTolerance
+    ) internal view returns (uint256) {
+        uint256[] memory amountsIn = IUniswapV2Router02(UniswapRouter)
+            .getAmountsIn(amountOut, path);
+        return (amountsIn[0] * (1000 + slippageTolerance)) / 1000;
     }
 
-    function sendZETA(address tokenA, uint256 amount, bool isWrap) internal returns (uint256) {
+    function sendZETA(
+        address tokenA,
+        uint256 amount,
+        bool isWrap
+    ) internal returns (uint256) {
         if (tokenA != WZETA) revert Errors.OnlySupportZETA();
         if (amount == 0) revert Errors.NeedsMoreThanZero();
 
         // tZETA
         if (!isWrap) {
             if (msg.value != amount) revert Errors.IncorrectAmountOfZETASent();
-            if (address(this).balance < amount) revert Errors.InsufficientFunds();
+            if (address(this).balance < amount)
+                revert Errors.InsufficientFunds();
 
             IWETH9(WZETA).deposit{value: amount}();
             amount = IWETH9(WZETA).balanceOf(address(this));
-            if (!IWETH9(WZETA).approve(UniswapRouter, amount)) revert Errors.ApprovalFailed();
+            if (!IWETH9(WZETA).approve(UniswapRouter, amount))
+                revert Errors.ApprovalFailed();
             emit ZETAWrapped(msg.sender, amount);
         } else {
             if (IWETH9(WZETA).allowance(msg.sender, address(this)) < amount) {
                 revert Errors.InsufficientAllowance();
             }
 
-            TransferHelper.safeTransferFrom(WZETA, msg.sender, address(this), amount);
+            TransferHelper.safeTransferFrom(
+                WZETA,
+                msg.sender,
+                address(this),
+                amount
+            );
             amount = IWETH9(WZETA).balanceOf(address(this));
 
-            if (!IWETH9(WZETA).approve(UniswapRouter, amount)) revert Errors.ApprovalFailed();
+            if (!IWETH9(WZETA).approve(UniswapRouter, amount))
+                revert Errors.ApprovalFailed();
             emit TokenTransfer(msg.sender, amount);
         }
 
@@ -329,25 +399,33 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         bool isCrossChain
     ) internal returns (uint256) {
         if (amountIn == 0) revert Errors.NeedsMoreThanZero();
-        if (slippageTolerance > MAX_SLIPPAGE) revert Errors.SlippageToleranceExceedsMaximum();
+        if (slippageTolerance > MAX_SLIPPAGE)
+            revert Errors.SlippageToleranceExceedsMaximum();
 
         address[] memory path;
         uint256[] memory amount;
         uint256 newAmount;
 
         (address gasZRC20, uint256 gasFee) = IZRC20(tokenB).withdrawGasFee();
-        if (gasFee < 0) revert Errors.InsufficientGasForWithdraw(); 
+        if (gasFee < 0) revert Errors.InsufficientGasForWithdraw();
 
         if (tokenA == WZETA) {
             amountIn = sendZETA(tokenA, amountIn, isWrap);
         } else {
             // Ensure the user has approved the contract to spend the tokens
 
-            if (IZRC20(tokenA).allowance(msg.sender, address(this)) < amountIn) {
+            if (
+                IZRC20(tokenA).allowance(msg.sender, address(this)) < amountIn
+            ) {
                 revert Errors.InsufficientAllowance();
             }
 
-            TransferHelper.safeTransferFrom(tokenA, msg.sender, address(this), amountIn);
+            TransferHelper.safeTransferFrom(
+                tokenA,
+                msg.sender,
+                address(this),
+                amountIn
+            );
             TransferHelper.safeApprove(tokenA, UniswapRouter, amountIn);
 
             path = new address[](2);
@@ -356,18 +434,29 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
 
             // Swap tokenA to WZETA
             amount = IUniswapV2Router02(UniswapRouter).swapExactTokensForTokens(
-                amountIn,
-                calculateMinimumOutputAmount(amountIn, path, slippageTolerance),
-                path,
-                address(this),
-                block.timestamp + MAX_DEADLINE
-            );
+                    amountIn,
+                    calculateMinimumOutputAmount(
+                        amountIn,
+                        path,
+                        slippageTolerance
+                    ),
+                    path,
+                    address(this),
+                    block.timestamp + MAX_DEADLINE
+                );
             if (amount[1] == 0) revert Errors.SwapFailed();
             TransferHelper.safeApprove(WZETA, UniswapRouter, amount[1]);
             amountIn = amount[1];
         }
 
-        newAmount = handleWithdraw(tokenB, isCrossChain, gasZRC20, gasFee, amountIn, slippageTolerance);
+        newAmount = handleWithdraw(
+            tokenB,
+            isCrossChain,
+            gasZRC20,
+            gasFee,
+            amountIn,
+            slippageTolerance
+        );
 
         return newAmount;
     }
@@ -387,13 +476,18 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
             path[0] = WZETA;
             path[1] = gasZRC20;
 
-            uint256[] memory inputForGas = IUniswapV2Router02(UniswapRouter).swapTokensForExactTokens(
-                gasFee,
-                calculateMaximumInputAmount(gasFee, path, slippageTolerance),
-                path,
-                address(this),
-                block.timestamp + MAX_DEADLINE
-            );
+            uint256[] memory inputForGas = IUniswapV2Router02(UniswapRouter)
+                .swapTokensForExactTokens(
+                    gasFee,
+                    calculateMaximumInputAmount(
+                        gasFee,
+                        path,
+                        slippageTolerance
+                    ),
+                    path,
+                    address(this),
+                    block.timestamp + MAX_DEADLINE
+                );
 
             if (inputForGas[0] == 0) revert Errors.SwapFailed();
 
@@ -403,17 +497,26 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
             path[0] = WZETA;
             path[1] = tokenB;
 
-            newAmount = handleExactTokensForTokens(remainingAmount, path, MAX_DEADLINE, slippageTolerance);
+            newAmount = handleExactTokensForTokens(
+                remainingAmount,
+                path,
+                MAX_DEADLINE,
+                slippageTolerance
+            );
 
             TransferHelper.safeApprove(gasZRC20, tokenB, gasFee);
             IZRC20(tokenB).withdraw(abi.encodePacked(msg.sender), newAmount);
-
         } else {
             // Swap remaining WZETA to tokenB
             path[0] = WZETA;
             path[1] = tokenB;
 
-            newAmount = handleExactTokensForTokens(newAmount, path, MAX_DEADLINE, slippageTolerance);
+            newAmount = handleExactTokensForTokens(
+                newAmount,
+                path,
+                MAX_DEADLINE,
+                slippageTolerance
+            );
             TransferHelper.safeTransfer(tokenB, msg.sender, newAmount);
         }
         return newAmount;
@@ -425,26 +528,32 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         uint256 deadline,
         uint256 slippageTolerance
     ) internal returns (uint256) {
-        uint256[] memory amountOut = IUniswapV2Router02(UniswapRouter).swapExactTokensForTokens(
-            amountIn,
-            calculateMinimumOutputAmount(amountIn, path, slippageTolerance),
-            path,
-            address(this),
-            block.timestamp + deadline
-        );
+        uint256[] memory amountOut = IUniswapV2Router02(UniswapRouter)
+            .swapExactTokensForTokens(
+                amountIn,
+                calculateMinimumOutputAmount(amountIn, path, slippageTolerance),
+                path,
+                address(this),
+                block.timestamp + deadline
+            );
         if (amountOut[1] == 0) revert Errors.SwapFailed();
 
         return amountOut[1];
     }
 
-    function swapTokens(address tokenA, address tokenB, uint256 amountA, bool isWrap, uint256 slippageTolerance)
-        internal
-        returns (uint256)
-    {
+    function swapTokens(
+        address tokenA,
+        address tokenB,
+        uint256 amountA,
+        bool isWrap,
+        uint256 slippageTolerance
+    ) internal returns (uint256) {
         if (amountA == 0) revert Errors.NeedsMoreThanZero();
 
-        if (platformFee > 9999) revert Errors.PlatformFeeNeedslessThanOneHundredPercent();
-        if (slippageTolerance > MAX_SLIPPAGE) revert Errors.SlippageToleranceExceedsMaximum();
+        if (platformFee > 9999)
+            revert Errors.PlatformFeeNeedslessThanOneHundredPercent();
+        if (slippageTolerance > MAX_SLIPPAGE)
+            revert Errors.SlippageToleranceExceedsMaximum();
 
         uint256 amountOut;
 
@@ -458,24 +567,37 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
             if (IZRC20(tokenA).allowance(msg.sender, address(this)) < amountA) {
                 revert Errors.InsufficientAllowance();
             }
-            TransferHelper.safeTransferFrom(tokenA, msg.sender, address(this), amountA);
+            TransferHelper.safeTransferFrom(
+                tokenA,
+                msg.sender,
+                address(this),
+                amountA
+            );
             TransferHelper.safeApprove(tokenA, UniswapRouter, amountA);
         }
 
         address[] memory path;
-        address pairAddress = IUniswapV2Factory(UniswapFactory).getPair(tokenA, tokenB);
+        address pairAddress = IUniswapV2Factory(UniswapFactory).getPair(
+            tokenA,
+            tokenB
+        );
         if (pairAddress != address(0)) {
             path = new address[](2);
             path[0] = tokenA;
             path[1] = tokenB;
 
-            uint256[] memory amounts = IUniswapV2Router02(UniswapRouter).swapExactTokensForTokens(
-                amountA,
-                calculateMinimumOutputAmount(amountA, path, slippageTolerance),
-                path,
-                address(this),
-                block.timestamp + MAX_DEADLINE
-            );
+            uint256[] memory amounts = IUniswapV2Router02(UniswapRouter)
+                .swapExactTokensForTokens(
+                    amountA,
+                    calculateMinimumOutputAmount(
+                        amountA,
+                        path,
+                        slippageTolerance
+                    ),
+                    path,
+                    address(this),
+                    block.timestamp + MAX_DEADLINE
+                );
 
             amountOut = amounts[1];
         } else {
@@ -484,25 +606,34 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
             path[1] = WZETA;
             path[2] = tokenB;
 
-            uint256[] memory amounts = IUniswapV2Router02(UniswapRouter).swapExactTokensForTokens(
-                amountA,
-                calculateMinimumOutputAmount(amountA, path, slippageTolerance),
-                path,
-                address(this),
-                block.timestamp + MAX_DEADLINE
-            );
+            uint256[] memory amounts = IUniswapV2Router02(UniswapRouter)
+                .swapExactTokensForTokens(
+                    amountA,
+                    calculateMinimumOutputAmount(
+                        amountA,
+                        path,
+                        slippageTolerance
+                    ),
+                    path,
+                    address(this),
+                    block.timestamp + MAX_DEADLINE
+                );
 
             amountOut = amounts[2];
         }
-        
+
         emit PerformSwap(tokenA, tokenB, amountA, amountOut);
         return amountOut;
     }
 
-    function withdrawOther(address token, bytes memory recipient, uint256 amount, bool isWithdraw) internal {
-
+    function withdrawOther(
+        address token,
+        bytes memory recipient,
+        uint256 amount,
+        bool isWithdraw
+    ) internal {
         (address gasZRC20, uint256 gasFee) = IZRC20(token).withdrawGasFee();
-        if (gasFee < 0) revert Errors.InsufficientGasForWithdraw(); 
+        if (gasFee < 0) revert Errors.InsufficientGasForWithdraw();
         TransferHelper.safeApprove(gasZRC20, token, gasFee);
         if (amount < gasFee) revert Errors.InsufficientFunds();
 
@@ -510,8 +641,8 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
             Transfer platformFee 
         */
         if (amount == 0) revert Errors.TransferFailed();
-        uint256 feeAmount = (amount-gasFee) * platformFee / 10000;
-        uint256 newAmount = (amount-gasFee) - feeAmount;
+        uint256 feeAmount = ((amount - gasFee) * platformFee) / 10000;
+        uint256 newAmount = (amount - gasFee) - feeAmount;
 
         if (feeAmount > 0) {
             TransferHelper.safeTransfer(token, kyexTreasury, feeAmount);
@@ -522,16 +653,21 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         } else {
             TransferHelper.safeTransfer(token, msg.sender, newAmount);
         }
-
     }
 
-    function transferTokens(address tokenAddress, address recipient, uint256 amount, bool isWrap, bool isCrossChain, uint8 chainId) internal {
-
+    function transferTokens(
+        address tokenAddress,
+        address recipient,
+        uint256 amount,
+        bool isWrap,
+        bool isCrossChain,
+        uint8 chainId
+    ) internal {
         /*
             Transfer platformFee 
         */
         if (amount == 0) revert Errors.TransferFailed();
-        uint256 feeAmount = amount * platformFee / 10000;
+        uint256 feeAmount = (amount * platformFee) / 10000;
         uint256 newAmount = amount - feeAmount;
 
         if (feeAmount > 0) {
@@ -544,15 +680,16 @@ contract KYEXSwap01 is UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable 
         } else if (isWrap) {
             if (newAmount == 0) revert Errors.TransferFailed();
             TransferHelper.safeTransfer(tokenAddress, recipient, newAmount);
-        } else { // !isWrap
+        } else {
+            // !isWrap
             // Withdraw WZETA to tZETA
             // Send tZETA to recipient
             IWETH9(tokenAddress).withdraw(newAmount);
-            (bool sent,) = recipient.call{value: newAmount}("");
+            (bool sent, ) = recipient.call{value: newAmount}("");
             if (!sent) revert Errors.TransferFailed();
         }
 
-        emit TokenTransfer(recipient, newAmount); // No need to convert recipient to address 
+        emit TokenTransfer(recipient, newAmount); // No need to convert recipient to address
     }
 
     ///////////////////
