@@ -13,6 +13,7 @@ import "libraries/zetaV2/interfaces/IWZETA.sol";
 import "libraries/TransferHelper.sol";
 import "libraries/error/Errors.sol";
 import "libraries/zetaV2/interfaces/ZetaInterfaces.sol";
+import "hardhat/console.sol";
 
 /*
 
@@ -231,6 +232,17 @@ contract KYEXSwap01 is
                 minAmountOut,
                 true
             );
+            amountOut = sendPlatformFee(amountOut, tokenOutOfZetaChain);
+
+            sendToUser(
+                isCrossChain,
+                tokenOutOfZetaChain,
+                btcRecipient,
+                address(0),
+                0,
+                amountOut,
+                chainId
+            );
         } else {
             (address gasZRC20, uint256 gasFee) = IZRC20(tokenOutOfZetaChain)
                 .withdrawGasFee();
@@ -272,6 +284,7 @@ contract KYEXSwap01 is
                 );
                 amountOut -= gasFeeWithTokenOut;
             }
+
             amountOut = sendPlatformFee(amountOut, tokenOutOfZetaChain);
             sendToUser(
                 isCrossChain,
@@ -282,17 +295,17 @@ contract KYEXSwap01 is
                 amountOut,
                 chainId
             );
-            (tokenInOfZetaChain == WZETA)
-                ? volume += amountIn
-                : volume += getZetaQuote(tokenInOfZetaChain, WZETA, amountIn);
-            emit SwapExecuted(
-                msg.sender,
-                tokenInOfZetaChain,
-                tokenOutOfZetaChain,
-                amountIn,
-                amountOut
-            );
         }
+        (tokenInOfZetaChain == WZETA)
+            ? volume += amountIn
+            : volume += getZetaQuote(tokenInOfZetaChain, WZETA, amountIn);
+        emit SwapExecuted(
+            msg.sender,
+            tokenInOfZetaChain,
+            tokenOutOfZetaChain,
+            amountIn,
+            amountOut
+        );
     }
 
     ///////////////////
@@ -357,6 +370,7 @@ contract KYEXSwap01 is
         if (feeAmount > 0) {
             TransferHelper.safeTransfer(token, kyexTreasury, feeAmount);
         }
+        console.log("feeAmount", feeAmount);
         emit ReceivePlatformFee(token, msg.sender, kyexTreasury, feeAmount);
     }
 
@@ -419,7 +433,7 @@ contract KYEXSwap01 is
                     address(this),
                     block.timestamp + MAX_DEADLINE
                 );
-            amount = amounts[2];
+            amount = amounts[1];
         } else {
             amounts = IUniswapV2Router02(UniswapRouter)
                 .swapTokensForExactTokens(
