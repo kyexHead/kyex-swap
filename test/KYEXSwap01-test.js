@@ -9,26 +9,29 @@ const {
 
 describe("Test deployment and initialization", function () {
   it("Should deploy the proxy correctly ", async function () {
-    const { KYEXSwap01Proxy } = await loadFixture(deployKyexSwap01);
+    const { KYEXSwap01Proxy, platformFee } = await loadFixture(
+      deployKyexSwap01
+    );
     const KYEXSwap01ProxyAddr = await KYEXSwap01Proxy.getAddress();
     const implementationAddr = await upgrades.erc1967.getImplementationAddress(
       KYEXSwap01ProxyAddr
     );
     expect(implementationAddr).to.not.equal(ethers.ZeroAddress);
+    expect(await KYEXSwap01Proxy.platformFee()).to.equal(platformFee);
   });
 });
 
 ///////////////////
 // Test zrcSwapToNative
 ///////////////////
-describe("Test tokenOutOfZetaChain is not equals gasZRC20", function () {
-  it("tokenInOfZetaChain is ZETA && isCrossChain is false", async function () {
+describe("Test non cross chain", function () {
+  it("tokenInOfZetaChain is ZETA && tokenOutOfZetaChain is ZRC20", async function () {
     const { WZETA, UniswapFactory, UniswapRouter, KYEXSwap01Proxy, deployer } =
       await loadFixture(deployKyexSwap01);
+    const [, user1, user2] = await ethers.getSigners();
 
-    const amount = ethers.parseUnits("1000", 18);
     await WZETA.connect(deployer).deposit({
-      value: amount,
+      value: ethers.parseUnits("500", 18),
     });
     const MockZRC20Factory = await ethers.getContractFactory("MockZRC20");
     const MockZRC20USDC = await MockZRC20Factory.connect(deployer).deploy(
@@ -48,28 +51,16 @@ describe("Test tokenOutOfZetaChain is not equals gasZRC20", function () {
     const WZETAAddr = await WZETA.getAddress();
     const MockZRC20USDCAddr = await MockZRC20USDC.getAddress();
 
-    const MockZRC20ETH = await MockZRC20Factory.connect(deployer).deploy(
-      1000,
-      "ETH",
-      "ETH"
-    );
-    const MockZRC20ETHAddr = await MockZRC20ETH.getAddress();
-    MockZRC20USDC.setGasFeeAddress(MockZRC20ETHAddr);
-
     const KYEXSwap01ProxyAddr = await KYEXSwap01Proxy.getAddress();
-    await WZETA.connect(deployer).approve(
-      KYEXSwap01ProxyAddr,
-      ethers.parseUnits("10", 18)
-    );
-    const tx = await KYEXSwap01Proxy.connect(deployer).zrcSwapToNative(
+
+    const tx = await KYEXSwap01Proxy.connect(deployer).swapFromZetaChainToAny(
       WZETAAddr,
       MockZRC20USDCAddr,
-      ethers.parseUnits("10", 18),
-      true,
+      ethers.parseUnits("100", 18),
       ethers.ZeroAddress,
-      10,
+      ethers.parseUnits("96", 18),
       false,
-      1
+      0
     );
     await expect(tx)
       .to.emit(KYEXSwap01Proxy, "TokenTransfer")

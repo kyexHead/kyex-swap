@@ -41,8 +41,8 @@ async function deployKyexSwap01() {
         UniswapFactoryAddr,
         deployer.address,
         600, //MAX_DEADLINE
-        0, //platformFee
-        500, //MAX_SLIPPAGE
+        3, //platformFee : 0.3%
+        ethers.ZeroAddress, //connectorAddress
       ],
       { initializer: "initialize", kind: "uups" }
     );
@@ -54,8 +54,7 @@ async function deployKyexSwap01() {
       UniswapFactory: UniswapFactory,
       UniswapRouter: UniswapRouter,
       MAX_DEADLINE: 600,
-      platformFee: 0,
-      MAX_SLIPPAGE: 500,
+      platformFee: 3,
       KYEXSwap01Proxy: KYEXSwap01Proxy,
       deployer: deployer,
     };
