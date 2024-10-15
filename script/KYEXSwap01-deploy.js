@@ -59,7 +59,35 @@ async function deployKyexSwap01() {
       deployer: deployer,
     };
   } else if (network.name == "zeta_test") {
-    // TODO
+    const KYEXSwap01Factory = await ethers.getContractFactory("KYEXSwap01");
+    const KYEXSwap01 = await KYEXSwap01Factory.deploy();
+    await KYEXSwap01.waitForDeployment();
+    console.log(await KYEXSwap01.getAddress());
+    await KYEXSwap01.initialize(
+      "0x5F0b1a82749cb4E2278EC87F8BF6B618dC71a8bf",
+      "0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe",
+      "0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c",
+      deployer.address,
+      600,
+      0,
+      "0x239e96c8f17c85c30100ac26f635ea15f23e9c67"
+    );
+
+    // const KYEXSwap01Proxy = await upgrades.deployProxy(
+    //   KYEXSwap01Factory,
+    //   [
+    //     "0x5F0b1a82749cb4E2278EC87F8BF6B618dC71a8bf",
+    //     "0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe",
+    //     "0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c",
+    //     deployer.address,
+    //     600, //MAX_DEADLINE
+    //     0, //platformFee
+    //     "0x239e96c8f17C85c30100AC26F635Ea15f23E9c67", //connectorAddress
+    //   ],
+    //   { initializer: "initialize", kind: "uups" }
+    // );
+    // await KYEXSwap01Proxy.waitForDeployment();
+    // console.log("KYEXSwap01Proxy address:", await KYEXSwap01Proxy.getAddress());
   } else if (network.name == "zeta_mainnet") {
     // TODO
   }

@@ -27,6 +27,7 @@ module.exports = {
         enabled: true,
         runs: 1000,
       },
+      viaIR: true,
     },
   },
   networks: {
@@ -41,6 +42,7 @@ module.exports = {
     zeta_test: {
       url: "https://zetachain-athens-evm.blockpi.network/v1/rpc/public",
       chainId: 7001,
+      accounts: [deployer],
     },
   },
 };

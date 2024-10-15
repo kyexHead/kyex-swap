@@ -8,12 +8,12 @@ import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "libraries/zetaV2/interfaces/IZRC20.sol";
 import "libraries/zetaV2/interfaces/IWZETA.sol";
+import "libraries/zetaV2/SystemContract.sol";
 import "libraries/TransferHelper.sol";
 import "libraries/error/Errors.sol";
+import "libraries/zetaV2/interfaces/zContract.sol";
 import "libraries/zetaV2/interfaces/ZetaInterfaces.sol";
-import "hardhat/console.sol";
 
 /*
 
@@ -44,22 +44,36 @@ import "hardhat/console.sol";
  * @author KYEX-TEAM
  * @dev KYEX Mainnet ZETACHAIN zrcSwap Smart Contract V1
  */
-contract KYEXSwap01 is
+contract KYEXSwapV1 is
+    zContract,
     UUPSUpgradeable,
     OwnableUpgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable
 {
     ///////////////////
+    // Struct
+    ///////////////////
+    struct ZetaSystemConfig {
+        address UniswapFactory;
+        address UniswapRouter;
+        address WZETA;
+        address connector;
+    }
+
+    struct SwapResult {
+        uint256 amountOut;
+        address gasZRC20;
+        uint256 gasFee;
+    }
+
+    ///////////////////
     // State Variables
     ///////////////////
-    address private WZETA; // Note:when deploying on the mainnet，This should be changed to 【 address public constant WZETA = 0x5F0b1a82749cb4E2278EC87F8BF6B618dC71a8bf; 】
     address private constant BITCOIN =
         0x13A0c5930C028511Dc02665E7285134B6d11A5f4; // Note:when deploying on the testnet，This should be changed to 【 address public constant BITCOIN = 0x65a45c57636f9BcCeD4fe193A602008578BcA90b; 】
-    address private UniswapRouter;
-    address private UniswapFactory;
+    SystemContract private ZetaSystemContract;
     address private kyexTreasury;
-    ZetaConnector private connector;
     uint32 private MAX_DEADLINE;
 
     uint16 public platformFee;
@@ -93,7 +107,7 @@ contract KYEXSwap01 is
         address gasZRC20,
         uint256 gasFee,
         uint256 amount,
-        uint8 chainId
+        uint256 chainId
     );
     event ZETAWithdrawn(address indexed owner, uint256 amount);
     event ZRC20Withdrawn(address indexed owner, uint256 amount);
@@ -105,6 +119,15 @@ contract KYEXSwap01 is
     );
 
     ///////////////////
+    // Modifiers
+    ///////////////////
+    modifier onlySystem(SystemContract _systemContract) {
+        if (msg.sender != address(_systemContract))
+            revert Errors.OnlySystemContract();
+        _;
+    }
+
+    ///////////////////
     // Initialize Function
     ///////////////////
 
@@ -112,26 +135,20 @@ contract KYEXSwap01 is
      * @notice To Iinitialize contract after deployed.
      */
     function initialize(
-        address _WZETA, //Note: when deploying on the mainnet，this line should be deleted.
-        address _UniswapRouter,
-        address _UniswapFactory,
         address _kyexTreasury,
         uint32 _MAX_DEADLINE,
         uint16 _platformFee,
-        address _connectorAddress
+        address _systemContract
     ) external initializer {
         __Ownable_init();
         __Pausable_init();
         __ReentrancyGuard_init();
 
-        WZETA = _WZETA; //Note: when deploying on the mainnet，this line should be deleted.
-        UniswapRouter = _UniswapRouter;
-        UniswapFactory = _UniswapFactory;
         kyexTreasury = _kyexTreasury;
         MAX_DEADLINE = _MAX_DEADLINE;
         platformFee = _platformFee;
+        ZetaSystemContract = SystemContract(_systemContract);
         volume = 0;
-        connector = ZetaConnector(_connectorAddress);
     }
 
     ///////////////////
@@ -170,21 +187,12 @@ contract KYEXSwap01 is
     }
 
     /**
-     * @dev update uniswap
+     * @dev update systemContract
      */
-    function updateUniswap(
-        address _UniswapFactory,
-        address _UniswapRouter
+    function updateZetaSystemContract(
+        address _systemContract
     ) external onlyOwner {
-        UniswapFactory = _UniswapFactory;
-        UniswapRouter = _UniswapRouter;
-    }
-
-    /**
-     * @dev update zetaConnector
-     */
-    function updateZetaConnector(address _connectorAddress) external onlyOwner {
-        connector = ZetaConnector(_connectorAddress);
+        ZetaSystemContract = SystemContract(_systemContract);
     }
 
     /**
@@ -193,7 +201,6 @@ contract KYEXSwap01 is
     function withdrawZETA() external onlyOwner {
         uint256 balance = address(this).balance;
         if (balance == 0) revert Errors.InsufficientFunds();
-
         TransferHelper.safeTransferZETA(owner(), balance);
 
         emit ZETAWithdrawn(owner(), balance);
@@ -205,7 +212,6 @@ contract KYEXSwap01 is
     function withdrawZRC20(address zrc20Address) external onlyOwner {
         uint256 balance = IZRC20(zrc20Address).balanceOf(address(this));
         if (balance == 0) revert Errors.InsufficientFunds();
-
         TransferHelper.safeTransfer(zrc20Address, owner(), balance);
 
         emit ZRC20Withdrawn(owner(), balance);
@@ -218,93 +224,98 @@ contract KYEXSwap01 is
         bytes memory btcRecipient,
         uint256 minAmountOut,
         bool isCrossChain,
-        uint8 chainId
+        uint256 chainId
     ) external payable whenNotPaused nonReentrant {
-        receiveToken(amountIn, tokenInOfZetaChain);
+        ZetaSystemConfig memory zetaSystemConfig = getConfigFromSystem();
 
-        uint256 amountOut;
-        if (!isCrossChain) {
-            amountOut = swapTokens(
-                tokenInOfZetaChain,
-                tokenOutOfZetaChain,
-                amountIn,
-                0,
-                minAmountOut,
-                true
-            );
-            amountOut = sendPlatformFee(amountOut, tokenOutOfZetaChain);
+        receiveToken(amountIn, tokenInOfZetaChain, zetaSystemConfig.WZETA);
+        TransferHelper.safeApprove(
+            tokenInOfZetaChain,
+            zetaSystemConfig.UniswapRouter,
+            amountIn
+        );
 
-            sendToUser(
-                isCrossChain,
-                tokenOutOfZetaChain,
-                btcRecipient,
-                address(0),
-                0,
-                amountOut,
-                chainId
-            );
-        } else {
-            (address gasZRC20, uint256 gasFee) = IZRC20(tokenOutOfZetaChain)
-                .withdrawGasFee();
-            if (tokenInOfZetaChain == gasZRC20) {
-                amountOut = swapTokens(
-                    tokenInOfZetaChain,
-                    tokenOutOfZetaChain,
-                    amountIn - gasFee,
-                    0,
-                    minAmountOut,
-                    true
-                );
-            } else if (tokenOutOfZetaChain == gasZRC20) {
-                amountOut = swapTokens(
-                    tokenInOfZetaChain,
-                    tokenOutOfZetaChain,
-                    amountIn,
-                    0,
-                    minAmountOut,
-                    true
-                );
-                amountOut -= gasFee;
-            } else {
-                amountOut = swapTokens(
-                    tokenInOfZetaChain,
-                    tokenOutOfZetaChain,
-                    amountIn,
-                    0,
-                    minAmountOut,
-                    true
-                );
-                uint256 gasFeeWithTokenOut = swapTokens(
-                    tokenOutOfZetaChain,
-                    gasZRC20,
-                    amountOut,
-                    gasFee,
-                    0,
-                    false
-                );
-                amountOut -= gasFeeWithTokenOut;
-            }
+        SwapResult memory swapResult = calculateAmountOut(
+            isCrossChain,
+            zetaSystemConfig,
+            tokenInOfZetaChain,
+            tokenOutOfZetaChain,
+            amountIn,
+            minAmountOut
+        );
 
-            amountOut = sendPlatformFee(amountOut, tokenOutOfZetaChain);
-            sendToUser(
-                isCrossChain,
-                tokenOutOfZetaChain,
-                btcRecipient,
-                gasZRC20,
-                gasFee,
-                amountOut,
-                chainId
-            );
-        }
-        (tokenInOfZetaChain == WZETA)
-            ? volume += amountIn
-            : volume += getZetaQuote(tokenInOfZetaChain, WZETA, amountIn);
+        sendToUser(
+            zetaSystemConfig.WZETA,
+            isCrossChain,
+            tokenOutOfZetaChain,
+            btcRecipient,
+            msg.sender,
+            swapResult,
+            chainId,
+            zetaSystemConfig.connector
+        );
+        calculateVolume(
+            tokenInOfZetaChain,
+            amountIn,
+            zetaSystemConfig.UniswapRouter,
+            zetaSystemConfig.WZETA
+        );
         emit SwapExecuted(
             msg.sender,
             tokenInOfZetaChain,
             tokenOutOfZetaChain,
             amountIn,
-            amountOut
+            swapResult.amountOut
+        );
+    }
+
+    function onCrossChainCall(
+        zContext calldata /* context */,
+        address tokenInOfZetaChain,
+        uint256 amountIn,
+        bytes calldata message
+    ) external override onlySystem(ZetaSystemContract) whenNotPaused {
+        (
+            bool isCrossChain,
+            uint256 minAmountOut,
+            address tokenOutOfZetaChain,
+            bytes memory recipient
+        ) = abi.decode(message, (bool, uint256, address, bytes));
+
+        ZetaSystemConfig memory zetaSystemConfig = getConfigFromSystem();
+
+        SwapResult memory swapResult = calculateAmountOut(
+            isCrossChain,
+            zetaSystemConfig,
+            tokenInOfZetaChain,
+            tokenOutOfZetaChain,
+            amountIn,
+            minAmountOut
+        );
+
+        address addrOfRecipient = address(uint160(bytes20(recipient)));
+        sendToUser(
+            zetaSystemConfig.WZETA,
+            isCrossChain,
+            tokenOutOfZetaChain,
+            recipient,
+            addrOfRecipient,
+            swapResult,
+            0,
+            zetaSystemConfig.connector
+        );
+        calculateVolume(
+            tokenInOfZetaChain,
+            amountIn,
+            zetaSystemConfig.UniswapRouter,
+            zetaSystemConfig.WZETA
+        );
+        emit SwapExecuted(
+            addrOfRecipient,
+            tokenInOfZetaChain,
+            tokenOutOfZetaChain,
+            amountIn,
+            swapResult.amountOut
         );
     }
 
@@ -322,20 +333,29 @@ contract KYEXSwap01 is
     /**
      * @dev Calculate trading volume and standardize tokenIn to WZETA
      */
-    function getZetaQuote(
+    function calculateVolume(
         address tokenIn,
-        address tokenOut,
-        uint256 amountIn
-    ) private view returns (uint256 amount) {
-        address[] memory path = new address[](2);
-        path[0] = tokenIn;
-        path[1] = tokenOut;
-        uint256[] memory amounts = IUniswapV2Router02(UniswapRouter)
-            .getAmountsOut(amountIn, path);
-        return amounts[1];
+        uint256 amountIn,
+        address UniswapRouter,
+        address WZETA
+    ) private {
+        if (tokenIn == WZETA) {
+            volume += amountIn;
+        } else {
+            address[] memory path = new address[](2);
+            path[0] = tokenIn;
+            path[1] = WZETA;
+            uint256[] memory amounts = IUniswapV2Router02(UniswapRouter)
+                .getAmountsOut(amountIn, path);
+            volume += amounts[1];
+        }
     }
 
-    function receiveToken(uint256 amountIn, address tokenIn) private {
+    function receiveToken(
+        uint256 amountIn,
+        address tokenIn,
+        address WZETA
+    ) private {
         if (amountIn == 0) revert Errors.NeedsMoreThanZero();
 
         if (tokenIn == WZETA) {
@@ -354,9 +374,98 @@ contract KYEXSwap01 is
                 amountIn
             );
         }
-        TransferHelper.safeApprove(tokenIn, UniswapRouter, amountIn);
-
         emit ReceivedToken(msg.sender, tokenIn, amountIn);
+    }
+
+    function calculateAmountOut(
+        bool isCrossChain,
+        ZetaSystemConfig memory zetaSystemConfig,
+        address tokenInOfZetaChain,
+        address tokenOutOfZetaChain,
+        uint256 amountIn,
+        uint256 minAmountOut
+    ) private returns (SwapResult memory) {
+        uint256 amountOut;
+        address gasZRC20;
+        uint256 gasFee;
+        if (!isCrossChain) {
+            amountOut = swapTokens(
+                zetaSystemConfig.UniswapFactory,
+                zetaSystemConfig.UniswapRouter,
+                zetaSystemConfig.WZETA,
+                tokenInOfZetaChain,
+                tokenOutOfZetaChain,
+                amountIn,
+                0,
+                minAmountOut,
+                true
+            );
+        } else {
+            (gasZRC20, gasFee) = IZRC20(tokenOutOfZetaChain).withdrawGasFee();
+            if (gasFee == 0) revert Errors.InvalidZetaValueAndGas();
+            if (tokenInOfZetaChain == gasZRC20) {
+                amountOut = swapTokens(
+                    zetaSystemConfig.UniswapFactory,
+                    zetaSystemConfig.UniswapRouter,
+                    zetaSystemConfig.WZETA,
+                    tokenInOfZetaChain,
+                    tokenOutOfZetaChain,
+                    amountIn - gasFee,
+                    0,
+                    minAmountOut,
+                    true
+                );
+            } else if (tokenOutOfZetaChain == gasZRC20) {
+                amountOut = swapTokens(
+                    zetaSystemConfig.UniswapFactory,
+                    zetaSystemConfig.UniswapRouter,
+                    zetaSystemConfig.WZETA,
+                    tokenInOfZetaChain,
+                    tokenOutOfZetaChain,
+                    amountIn,
+                    0,
+                    minAmountOut,
+                    true
+                );
+                amountOut -= gasFee;
+            } else {
+                amountOut = swapTokens(
+                    zetaSystemConfig.UniswapFactory,
+                    zetaSystemConfig.UniswapRouter,
+                    zetaSystemConfig.WZETA,
+                    tokenInOfZetaChain,
+                    tokenOutOfZetaChain,
+                    amountIn,
+                    0,
+                    minAmountOut,
+                    true
+                );
+                TransferHelper.safeApprove(
+                    tokenOutOfZetaChain,
+                    zetaSystemConfig.UniswapRouter,
+                    amountOut
+                );
+                uint256 gasFeeWithTokenOut = swapTokens(
+                    zetaSystemConfig.UniswapFactory,
+                    zetaSystemConfig.UniswapRouter,
+                    zetaSystemConfig.WZETA,
+                    tokenOutOfZetaChain,
+                    gasZRC20,
+                    amountOut,
+                    gasFee,
+                    0,
+                    false
+                );
+                amountOut -= gasFeeWithTokenOut;
+            }
+        }
+        amountOut = sendPlatformFee(amountOut, tokenOutOfZetaChain);
+        return
+            SwapResult({
+                amountOut: amountOut,
+                gasZRC20: gasZRC20,
+                gasFee: gasFee
+            });
     }
 
     function sendPlatformFee(
@@ -370,11 +479,13 @@ contract KYEXSwap01 is
         if (feeAmount > 0) {
             TransferHelper.safeTransfer(token, kyexTreasury, feeAmount);
         }
-        console.log("feeAmount", feeAmount);
         emit ReceivePlatformFee(token, msg.sender, kyexTreasury, feeAmount);
     }
 
     function swapTokens(
+        address UniswapFactory,
+        address UniswapRouter,
+        address WZETA,
         address tokenA,
         address tokenB,
         uint256 amountIn,
@@ -393,6 +504,7 @@ contract KYEXSwap01 is
             path[0] = tokenA;
             path[1] = tokenB;
             amount = swapOnUniswap(
+                UniswapRouter,
                 isExactInputToken,
                 amountIn,
                 gasFee,
@@ -405,6 +517,7 @@ contract KYEXSwap01 is
             path[1] = WZETA;
             path[2] = tokenB;
             amount = swapOnUniswap(
+                UniswapRouter,
                 isExactInputToken,
                 amountIn,
                 gasFee,
@@ -416,6 +529,7 @@ contract KYEXSwap01 is
     }
 
     function swapOnUniswap(
+        address UniswapRouter,
         bool isExactInputToken,
         uint256 amountIn,
         uint256 gasFee,
@@ -433,12 +547,12 @@ contract KYEXSwap01 is
                     address(this),
                     block.timestamp + MAX_DEADLINE
                 );
-            amount = amounts[1];
+            amount = amounts[path.length - 1];
         } else {
             amounts = IUniswapV2Router02(UniswapRouter)
                 .swapTokensForExactTokens(
                     gasFee,
-                    0,
+                    amountIn,
                     path,
                     address(this),
                     block.timestamp + MAX_DEADLINE
@@ -449,67 +563,72 @@ contract KYEXSwap01 is
     }
 
     function sendToUser(
+        address WZETA,
         bool isCrossChain,
         address token,
-        bytes memory btcRecipient,
-        address gasZRC20,
-        uint256 gasFee,
-        uint256 amount,
-        uint8 chainId
+        bytes memory bytesOfReceipient,
+        address addrOfreceipient,
+        SwapResult memory swapResult,
+        uint256 chainId,
+        address connector
     ) private {
-        if (token == WZETA) {
-            sendZeta(isCrossChain, chainId, amount);
-        }
         if (isCrossChain) {
-            if (token != gasZRC20) {
-                TransferHelper.safeApprove(gasZRC20, token, gasFee);
-            }
+            TransferHelper.safeApprove(
+                swapResult.gasZRC20,
+                token,
+                swapResult.gasFee
+            );
             if (token == BITCOIN) {
-                IZRC20(token).withdraw(btcRecipient, amount);
+                IZRC20(token).withdraw(bytesOfReceipient, swapResult.amountOut);
+            } else if (token == WZETA) {
+                transferZETAout(
+                    WZETA,
+                    connector,
+                    chainId,
+                    bytesOfReceipient,
+                    swapResult.amountOut
+                );
             } else {
-                IZRC20(token).withdraw(abi.encodePacked(msg.sender), amount);
+                IZRC20(token).withdraw(bytesOfReceipient, swapResult.amountOut);
             }
         } else {
-            TransferHelper.safeTransfer(token, msg.sender, amount);
+            if (token == WZETA) {
+                IWETH9(WZETA).withdraw(swapResult.amountOut);
+                TransferHelper.safeTransferZETA(
+                    addrOfreceipient,
+                    swapResult.amountOut
+                );
+            } else {
+                TransferHelper.safeTransfer(
+                    token,
+                    addrOfreceipient,
+                    swapResult.amountOut
+                );
+            }
         }
         emit TokenTransfer(
             isCrossChain,
             token,
-            msg.sender,
-            gasZRC20,
-            gasFee,
-            amount,
+            addrOfreceipient,
+            swapResult.gasZRC20,
+            swapResult.gasFee,
+            swapResult.amountOut,
             chainId
         );
-    }
-
-    function sendZeta(
-        bool isCrossChain,
-        uint8 chainId,
-        uint256 amount
-    ) private {
-        if (isCrossChain) {
-            transferZETAout(chainId, abi.encodePacked(msg.sender), amount);
-        } else {
-            IWETH9(WZETA).withdraw(amount);
-            TransferHelper.safeTransferZETA(msg.sender, amount);
-        }
     }
 
     /**
      * @dev Transfer WZETA to other native chain.
      */
     function transferZETAout(
+        address WZETA,
+        address connector,
         uint256 destinationChainId,
         bytes memory destinationAddress,
         uint256 destinationAmount
     ) private {
-        TransferHelper.safeApprove(
-            WZETA,
-            address(connector),
-            destinationAmount
-        );
-        connector.send(
+        TransferHelper.safeApprove(WZETA, connector, destinationAmount);
+        ZetaConnector(connector).send(
             ZetaInterfaces.SendInput({
                 destinationChainId: destinationChainId,
                 destinationAddress: destinationAddress,
@@ -519,6 +638,20 @@ contract KYEXSwap01 is
                 zetaParams: abi.encode("")
             })
         );
+    }
+
+    function getConfigFromSystem()
+        private
+        view
+        returns (ZetaSystemConfig memory)
+    {
+        return
+            ZetaSystemConfig({
+                UniswapFactory: ZetaSystemContract.uniswapv2FactoryAddress(),
+                UniswapRouter: ZetaSystemContract.uniswapv2Router02Address(),
+                WZETA: ZetaSystemContract.wZetaContractAddress(),
+                connector: ZetaSystemContract.zetaConnectorZEVMAddress()
+            });
     }
 
     ///////////////////
