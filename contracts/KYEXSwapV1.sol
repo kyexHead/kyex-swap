@@ -70,8 +70,7 @@ contract KYEXSwapV1 is
     ///////////////////
     // State Variables
     ///////////////////
-    address private constant BITCOIN =
-        0x13A0c5930C028511Dc02665E7285134B6d11A5f4; // Note:when deploying on the testnet，This should be changed to 【 address public constant BITCOIN = 0x65a45c57636f9BcCeD4fe193A602008578BcA90b; 】
+    address private BITCOIN;
     SystemContract private ZetaSystemContract;
     address private kyexTreasury;
     uint32 private MAX_DEADLINE;
@@ -138,7 +137,8 @@ contract KYEXSwapV1 is
         address _kyexTreasury,
         uint32 _MAX_DEADLINE,
         uint16 _platformFee,
-        address _systemContract
+        address _systemContract,
+        address _bitCoin
     ) external initializer {
         __Ownable_init();
         __Pausable_init();
@@ -148,6 +148,7 @@ contract KYEXSwapV1 is
         MAX_DEADLINE = _MAX_DEADLINE;
         platformFee = _platformFee;
         ZetaSystemContract = SystemContract(_systemContract);
+        BITCOIN = _bitCoin;
         volume = 0;
     }
 
