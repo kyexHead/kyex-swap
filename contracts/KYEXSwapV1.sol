@@ -16,7 +16,6 @@ import "libraries/zetaV2/interfaces/zContract.sol";
 import "libraries/zetaV2/interfaces/ZetaInterfaces.sol";
 
 /*
-
 ██╗░░██╗██╗░░░██╗███████╗██╗░░██╗
 ██║░██╔╝╚██╗░██╔╝██╔════╝╚██╗██╔╝
 █████═╝░░╚████╔╝░█████╗░░░╚███╔╝░
@@ -42,7 +41,7 @@ import "libraries/zetaV2/interfaces/ZetaInterfaces.sol";
 /**
  * @title KYEX CrossChain Swap
  * @author KYEX-TEAM
- * @dev KYEX Mainnet ZETACHAIN zrcSwap Smart Contract V1
+ * @dev KYEX Mainnet ZETACHAIN Smart Contract V1
  */
 contract KYEXSwapV1 is
     zContract,
@@ -218,6 +217,16 @@ contract KYEXSwapV1 is
         emit ZRC20Withdrawn(owner(), balance);
     }
 
+    /**
+     * @dev Swap tokens from ZetaChain to a native token on another chain or to a ZetaChain-based token
+     * @param tokenInOfZetaChain The address of the token on ZetaChain being swapped (WZETA or a ZRC20 token)
+     * @param tokenOutOfZetaChain The address of the desired output token on the target chain
+     * @param amountIn The amount of tokenInOfZetaChain to swap
+     * @param btcRecipient The Bitcoin address to receive BTC (only relevant when swapping to Bitcoin)
+     * @param minAmountOut The minimum acceptable token amount for the swap
+     * @param isCrossChain true: cross-chain swaps; false: swaps within ZetaChain
+     * @param chainId if tokenOutOfZetaChain is the address of WZETA and isCrossChain is true, chainId refers to the chain ID of the network the user wishes to swap to
+     */
     function swapFromZetaChainToAny(
         address tokenInOfZetaChain,
         address tokenOutOfZetaChain,
@@ -230,11 +239,6 @@ contract KYEXSwapV1 is
         ZetaSystemConfig memory zetaSystemConfig = getConfigFromSystem();
 
         receiveToken(amountIn, tokenInOfZetaChain, zetaSystemConfig.WZETA);
-        TransferHelper.safeApprove(
-            tokenInOfZetaChain,
-            zetaSystemConfig.UniswapRouter,
-            amountIn
-        );
 
         SwapResult memory swapResult = calculateAmountOut(
             isCrossChain,
@@ -249,7 +253,9 @@ contract KYEXSwapV1 is
             zetaSystemConfig.WZETA,
             isCrossChain,
             tokenOutOfZetaChain,
-            btcRecipient,
+            tokenOutOfZetaChain == BITCOIN
+                ? btcRecipient
+                : abi.encodePacked(msg.sender),
             msg.sender,
             swapResult,
             chainId,
@@ -270,6 +276,17 @@ contract KYEXSwapV1 is
         );
     }
 
+    /**
+     * @dev Enables cross-chain token swaps, likely utilizing ZetaChain for bridging.
+     *
+     * @param tokenInOfZetaChain: Address of the ZRC20 token being swapped.
+     * @param amountIn: Amount of the tokenInOfZetaChain token.
+     * @param message: Encoded message containing swap details (isCrossChain, minAmountOut, tokenOutOfZetaChain, recipient)
+     *                 isCrossChain true: cross-chain swaps; false: swaps within ZetaChain
+     *                 minAmountOut The minimum acceptable token amount for the swap
+     *                 tokenOutOfZetaChain The address of the desired output token on the target chain
+     *                 recipient Receiving address
+     */
     function onCrossChainCall(
         zContext calldata /* context */,
         address tokenInOfZetaChain,
@@ -352,6 +369,9 @@ contract KYEXSwapV1 is
         }
     }
 
+    /**
+     * @dev Receive the user's tokens
+     */
     function receiveToken(
         uint256 amountIn,
         address tokenIn,
@@ -378,6 +398,9 @@ contract KYEXSwapV1 is
         emit ReceivedToken(msg.sender, tokenIn, amountIn);
     }
 
+    /**
+     * @dev Calculate the amount of target tokens obtainable after the swap
+     */
     function calculateAmountOut(
         bool isCrossChain,
         ZetaSystemConfig memory zetaSystemConfig,
@@ -386,6 +409,11 @@ contract KYEXSwapV1 is
         uint256 amountIn,
         uint256 minAmountOut
     ) private returns (SwapResult memory) {
+        TransferHelper.safeApprove(
+            tokenInOfZetaChain,
+            zetaSystemConfig.UniswapRouter,
+            amountIn
+        );
         uint256 amountOut;
         address gasZRC20;
         uint256 gasFee;
@@ -469,6 +497,9 @@ contract KYEXSwapV1 is
             });
     }
 
+    /**
+     * @dev Send platform fees to the treasury
+     */
     function sendPlatformFee(
         uint256 amount,
         address token
@@ -641,6 +672,9 @@ contract KYEXSwapV1 is
         );
     }
 
+    /**
+     * @dev Retrieve the system configuration of ZetaChain
+     */
     function getConfigFromSystem()
         private
         view

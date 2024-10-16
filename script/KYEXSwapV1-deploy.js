@@ -1,5 +1,5 @@
 const { ethers, upgrades, network } = require("hardhat");
-async function deployKyexSwap01() {
+async function deployKyexSwapV1() {
   const [deployer] = await ethers.getSigners();
 
   if (network.name == "hardhat") {
@@ -31,23 +31,34 @@ async function deployKyexSwap01() {
     const UniswapRouterAddr = await UniswapRouter.getAddress();
     console.log("UniswapRouter address:", UniswapRouterAddr);
 
-    // deploy KYEXSwap01 proxy
-    const KYEXSwap01Factory = await ethers.getContractFactory("KYEXSwap01");
-    const KYEXSwap01Proxy = await upgrades.deployProxy(
-      KYEXSwap01Factory,
+    // deploy SystemContract
+    const MockSystemContract = await ethers.getContractFactory(
+      "contracts/mocks/MockSystemContract.sol:MockSystemContract"
+    );
+    const SystemContract = await MockSystemContract.deploy(
+      wzetaAddr,
+      UniswapFactoryAddr,
+      UniswapRouterAddr
+    );
+    await SystemContract.waitForDeployment();
+    const SystemContractAddr = await SystemContract.getAddress();
+    console.log("SystemContract address:", SystemContractAddr);
+
+    // deploy KYEXSwapV1 proxy
+    const KYEXSwapV1Factory = await ethers.getContractFactory("KYEXSwapV1");
+    const KYEXSwapV1Proxy = await upgrades.deployProxy(
+      KYEXSwapV1Factory,
       [
-        wzetaAddr,
-        UniswapRouterAddr,
-        UniswapFactoryAddr,
         deployer.address,
         600, //MAX_DEADLINE
         3, //platformFee : 0.3%
-        ethers.ZeroAddress, //connectorAddress
+        SystemContractAddr,
+        ethers.ZeroAddress, //bitCoin
       ],
       { initializer: "initialize", kind: "uups" }
     );
-    await KYEXSwap01Proxy.waitForDeployment();
-    console.log("KYEXSwap01Proxy address:", await KYEXSwap01Proxy.getAddress());
+    await KYEXSwapV1Proxy.waitForDeployment();
+    console.log("KYEXSwapV1Proxy address:", await KYEXSwapV1Proxy.getAddress());
 
     return {
       WZETA: wzeta,
@@ -55,22 +66,21 @@ async function deployKyexSwap01() {
       UniswapRouter: UniswapRouter,
       MAX_DEADLINE: 600,
       platformFee: 3,
-      KYEXSwap01Proxy: KYEXSwap01Proxy,
+      SystemContract: SystemContract,
+      KYEXSwapV1Proxy: KYEXSwapV1Proxy,
       deployer: deployer,
     };
   } else if (network.name == "zeta_test") {
-    const KYEXSwap01Factory = await ethers.getContractFactory("KYEXSwap01");
-    const KYEXSwap01 = await KYEXSwap01Factory.deploy();
-    await KYEXSwap01.waitForDeployment();
-    console.log(await KYEXSwap01.getAddress());
-    await KYEXSwap01.initialize(
-      "0x5F0b1a82749cb4E2278EC87F8BF6B618dC71a8bf",
-      "0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe",
-      "0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c",
+    const KYEXSwapV1Factory = await ethers.getContractFactory("KYEXSwapV1");
+    const KYEXSwapV1 = await KYEXSwapV1Factory.deploy();
+    await KYEXSwapV1.waitForDeployment();
+    console.log(await KYEXSwapV1.getAddress());
+    await KYEXSwapV1.initialize(
       deployer.address,
       600,
       0,
-      "0x239e96c8f17c85c30100ac26f635ea15f23e9c67"
+      "0xEdf1c3275d13489aCdC6cD6eD246E72458B8795B",
+      "0x65a45c57636f9BcCeD4fe193A602008578BcA90b"
     );
 
     // const KYEXSwap01Proxy = await upgrades.deployProxy(
@@ -93,7 +103,7 @@ async function deployKyexSwap01() {
   }
 }
 
-module.exports = { deployKyexSwap01 };
+module.exports = { deployKyexSwapV1 };
 if (require.main === module) {
-  deployKyexSwap01().then(() => process.exit(0));
+  deployKyexSwapV1().then(() => process.exit(0));
 }
