@@ -9,7 +9,7 @@ async function createUniswapPair(
   const tokenBaddr = await tokenB.getAddress();
   await UniswapFactory.createPair(tokenAaddr, tokenBaddr);
 
-  const LPAmount = ethers.parseUnits("500", 18);
+  const LPAmount = ethers.parseUnits("400", 18);
   const UniswapRouterAddr = await UniswapRouter.getAddress();
 
   await tokenA.approve(UniswapRouterAddr, LPAmount);
