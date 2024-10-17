@@ -2,183 +2,93 @@
 
 ## Project Overview
 
-KYEX is a decentralized platform facilitating token swaps and cross-chain transfers, leveraging ZetaChain for bridging assets between different blockchains. It implements a platform fee mechanism, where a portion of each swap is allocated to a designated treasury.
+KYEXSwapV1 is a decentralized exchange (DEX) built on ZetaChain. It facilitates token swaps both within the ZetaChain ecosystem and cross-chain to other networks. The contract leverages Uniswap V2 for liquidity and pricing, and ZetaChain's infrastructure for cross-chain message passing and asset transfer.
 
-## Contract: `KYEXSwap01`
+## Decentralized Token Swaps on ZetaChain
 
-This contract is the core of the KYEX platform, handling:
+This repository contains the `KYEXSwapV1.sol` contract, a decentralized exchange (DEX) built on ZetaChain. It enables users to swap tokens both within the ZetaChain ecosystem and cross-chain to other networks.
 
-- **Token Swaps:** Enables users to swap tokens within the ZetaChain ecosystem.
-- **Cross-Chain Swaps:** Facilitates swaps between ZetaChain and other networks like Ethereum or Bitcoin.
-- **Wrapped ZETA (WZETA) Handling:** Supports wrapping and unwrapping of WZETA tokens.
-- **Administrative Functions:** Provides functions for the contract owner to update crucial parameters such as the treasury address, platform fee, and slippage tolerance.
+## Contract Overview
 
-## Critical Functionalities
+`KYEXSwapV1.sol` is the core contract of the KYEXSwapV1 DEX. It handles the following functionalities:
 
-### `zrcSwapToNative`
+* **Token Swaps:** Facilitates token swaps using Uniswap V2 liquidity pools.
+* **Cross-Chain Transfers:** Leverages ZetaChain's infrastructure for secure cross-chain token transfers.
+* **Fee Management:** Calculates and distributes platform fees.
+* **Security:** Implements security measures like pausing functionality and reentrancy guards.
 
-**Purpose:** Swap tokens from ZetaChain to a native token on another chain or to a ZetaChain-based token.
+## Core Functionalities
 
-**Input Parameters:**
+### `swapFromZetaChainToAny`
 
-- `tokenInOfZetaChain`: The address of the token on ZetaChain being swapped (WZETA or a ZRC20 token).
-- `tokenOutOfZetaChain`: The address of the desired output token on the target chain.
-- `amountIn`: The amount of `tokenInOfZetaChain` to swap.
-- `isWrap`: `true` if the input token is tZETA and needs to be wrapped; `false` for WZETA.
-- `btcRecipient`: The Bitcoin address to receive BTC (only relevant when swapping to Bitcoin).
-- `slippageTolerance`: The maximum acceptable slippage percentage for the swap.
-- `isCrossChain`: `true` for cross-chain swaps; `false` for swaps within ZetaChain.
+This function allows users to swap tokens from ZetaChain to a native token on another chain or to a ZetaChain-based token.
 
-**Expected Output:**
+**Parameters:**
 
-- Executes the swap, potentially involving cross-chain transfers and Uniswap swaps.
-- Emits a `SwapExecuted` event containing swap details.
+* `tokenInOfZetaChain`: Address of the token on ZetaChain being swapped.
+* `tokenOutOfZetaChain`: Address of the desired output token.
+* `amountIn`: Amount of `tokenInOfZetaChain` to swap.
+* `btcRecipient`: Bitcoin address (if applicable).
+* `minAmountOut`: Minimum acceptable output amount.
+* `isCrossChain`: Boolean indicating cross-chain or on-chain swap.
+* `chainId`: Target chain ID (if applicable).
 
-**Business Logic:**
+**Logic:**
 
-1. Identifies the appropriate gas token (`gasZRC20`) for the target chain.
-2. Handles wrapping of tZETA if necessary.
-3. Performs the required swaps and cross-chain transfers as per the input parameters.
-4. Calculates and deducts the platform fee, transferring it to the treasury.
-5. Withdraws the final output token to the user's address (or the specified Bitcoin address for BTC swaps).
+1. Receives user tokens.
+2. Calculates the output amount based on Uniswap liquidity and fees.
+3. If cross-chain, interacts with ZetaChain's connector contract to initiate the transfer.
+4. Sends the swapped tokens to the user on the destination chain.
 
-### `swapTokens`
+### `onCrossChainCall`
 
-**Purpose:** Swap tokens within the ZetaChain ecosystem, potentially using Uniswap V2 if a direct pair isn't available.
+This function enables cross-chain token swaps initiated from another chain.
 
-**Input Parameters:**
+**Parameters:**
 
-- `tokenA`: The address of the input token.
-- `tokenB`: The address of the desired output token.
-- `amountA`: The amount of `tokenA` to swap.
-- `isWrap`: `true` if the input token is tZETA and needs to be wrapped; `false` for WZETA.
-- `slippageTolerance`: The maximum acceptable slippage percentage for the swap.
+* `context`: ZetaChain cross-chain message context.
+* `tokenInOfZetaChain`: Address of the input token on ZetaChain.
+* `amountIn`: Amount of `tokenInOfZetaChain`.
+* `message`: Encoded swap details.
 
-**Expected Output:**
+**Logic:**
 
-- Executes the swap.
-- Returns the amount of `tokenB` received after the swap and fee deduction.
-- Emits a `PerformSwap` event with swap details.
+1. Decodes the swap details from the message.
+2. Calculates the output amount.
+3. Interacts with ZetaChain's connector to finalize the cross-chain transfer.
+4. Sends the swapped tokens to the recipient on ZetaChain.
 
-**Business Logic:**
+### `withdrawZETA` and `withdrawZRC20`
 
-1. Handles wrapping of tZETA if needed.
-2. Checks if a direct pair exists on Uniswap for the tokens.
-3. Performs a single swap if a direct pair exists, otherwise, performs a two-step swap via WZETA.
-4. Calculates and deducts the platform fee.
+These functions allow the contract owner to withdraw ZETA or ZRC20 tokens from the contract.
 
-### `withdrawBTC`, `withdrawToken`, `transferZETA`, `transferZRC`
+**Parameters:**
 
-**Purpose:** These functions handle the final withdrawal or transfer of tokens to the user's address after a swap.
+* `withdrawZETA`: No parameters.
+* `withdrawZRC20`: `zrc20Address` - Address of the ZRC20 token to withdraw.
 
-**Interactions:**
+**Logic:**
 
-- Interact with the corresponding token contracts to execute transfers.
-- Emit `TokenTransfer` or `ZETAWrapped` events.
+1. Checks the contract's token balance.
+2. Transfers the balance to the owner's address.
 
 ## External Dependencies
 
-- **Uniswap V2:** `IUniswapV2Router02`, `IUniswapV2Factory` interfaces for on-chain swaps.
-- **ZetaChain:** `IZRC20`, `IWZETA` interfaces for interacting with ZRC20 tokens and WZETA.
-- **OpenZeppelin:** `UUPSUpgradeable`, `OwnableUpgradeable` for contract upgradability and ownership control.
-- **Custom Library:** `TransferHelper` for secure token transfers.
+* **Uniswap V2:** `IUniswapV2Router02`, `IUniswapV2Factory`
+* **ZetaChain:** `IWZETA`, `SystemContract`, `zContract`, `ZetaInterfaces`, `ZetaConnector`
+* **OpenZeppelin:** `UUPSUpgradeable`, `OwnableUpgradeable`, `PausableUpgradeable`, `ReentrancyGuardUpgradeable`
+* **Other Libraries:** `TransferHelper`, `Errors`
 
-## Deployment Process
+## Deployment
 
-1. **Compile Contracts:** Compile all Solidity contracts.
-2. **Deploy & Initialize:**
-   - Using Hardhat's `@openzeppelin/hardhat-upgrades` plugin, deploy the UUPS proxy contract.
-   - Initialize the contract's state variables and set the owner by calling the `initialize` function.
-3. **Set up Access Control:** Transfer contract ownership to the appropriate address or multi-sig wallet.
+The contract should be deployed on the ZetaChain network. The `initialize` function needs to be called after deployment to set the initial parameters.
 
-## ---------------------------------------------------------------
+## Security Considerations
 
-# KYEX Swap 02
+* The contract uses the UUPS upgradeable pattern, allowing for future upgrades.
+* Pausing functionality is implemented to halt trading in case of emergencies.
+* Reentrancy guards prevent reentrancy attacks.
 
-## 1. Contracts Under the Scope of Audit
+## License
 
-- `KYEXSwap02`
-
-## 2. Project Description
-
-KYEXSwap02 appears to be the core contract for the KYEX project, facilitating cross-chain token swaps, potentially leveraging ZetaChain for interoperability. It empowers users to swap tokens between different chains and provides functionalities for wrapping, unwrapping, and withdrawing various tokens, including ZETA and its wrapped counterpart, WZETA.
-
-## 3. Short Description of the Contract
-
-- **`KYEXSwap02`**
-  - Enables cross-chain token swaps, likely utilizing ZetaChain for bridging.
-  - Utilizes Uniswap V2 for on-chain swaps on the connected chain.
-  - Supports wrapping and unwrapping of ZETA (the native token) into WZETA (Wrapped ZETA).
-  - Implements a platform fee mechanism, collecting a portion of each swap and directing it to a treasury.
-  - Includes administrative functions for the owner to update key parameters (treasury address, platform fee, slippage tolerance, etc.).
-
-## 4. List of Critical Functionalities
-
-- **`onCrossChainCall`**
-
-  - **Input Parameters:**
-    - `context`: ZetaChain context data.
-    - `zrc20`: Address of the ZRC20 token being swapped.
-    - `amount`: Amount of the ZRC20 token.
-    - `message`: Encoded message containing swap details
-      - `isWithdraw`
-      - `slippage`
-      - `targetTokenAddress`
-      - `sameNetworkAddress`
-      - `recipientAddress`
-  - **Expected Output:**
-    - Executes the appropriate swap or transfer operation based on the message data.
-    - Emits `SwapExecuted` and potentially other events.
-  - **Business Logic:**
-    - Decodes the message to extract swap parameters.
-    - Handles scenarios based on `isWithdraw` value:
-      - `0`: Same-network swap
-      - `1`: Wrap and transfer (for WZETA)
-      - `2`: Unwrap and transfer (for WZETA)
-      - `3`: Transfer ERC20 token
-      - `4`: Deposit ZRC20 token
-    - Calculates and deducts platform fees.
-    - Interacts with Uniswap, ZRC20 contracts, and potentially ZetaChain's system contract.
-
-- **`calculateSwapAmounts`**
-
-  - **Input Parameters:**
-    - `zrc20`: Address of the input ZRC20 token.
-    - `targetTokenAddress`: Address of the desired output token.
-    - `newAmount`: Amount to be swapped.
-    - `slippage`: Allowed slippage tolerance.
-  - **Expected Output:**
-    - Returns a `SwapAmounts` struct with details about:
-      - the required gas token
-      - gas fee
-      - output amount
-      - target token status
-  - **Business Logic:**
-    - Determines if the target token is WZETA.
-    - Calculates gas fee and required input amount (if not WZETA).
-    - Calculates the expected output amount.
-
-- **`swapExactTokensForTokens`, `swapTokensForExactTokens` (in `SwapHelperLib`)**
-
-  - These functions likely interact with Uniswap V2 to perform token swaps, considering slippage tolerance.
-
-- **Various `withdraw` and `transfer` functions**
-  - Handle the final withdrawal or transfer of tokens to the recipient's address after a swap.
-
-## 5. External Dependencies
-
-- `@openzeppelin/contracts/proxy/utils/UUPSUpgradeable`
-- `@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable`
-- `SwapHelperLib`
-- `TransferHelper`
-- `BytesHelperLib`
-- `IWZETA`
-- `Errors`
-- `UniswapV2Library`
-- `SystemContract`
-
-## 6. Deployment Process (High-Level)
-
-1. **Compile Contracts**
-2. **Deploy & Initialize:** Deploy UUPS proxy contract and initialize it using the `initialize` function.
-3. **Set up Access Control:** Transfer ownership.
+This contract is licensed under the MIT License.
