@@ -417,7 +417,7 @@ contract KYEXSwapV1 is
         uint256 amountOut;
         address gasZRC20;
         uint256 gasFee;
-        if (!isCrossChain) {
+        if (!isCrossChain || tokenOutOfZetaChain == zetaSystemConfig.WZETA) {
             amountOut = swapTokens(
                 zetaSystemConfig.UniswapFactory,
                 zetaSystemConfig.UniswapRouter,
@@ -432,6 +432,7 @@ contract KYEXSwapV1 is
         } else {
             (gasZRC20, gasFee) = IZRC20(tokenOutOfZetaChain).withdrawGasFee();
             if (gasFee == 0) revert Errors.InvalidZetaValueAndGas();
+
             if (tokenInOfZetaChain == gasZRC20) {
                 amountOut = swapTokens(
                     zetaSystemConfig.UniswapFactory,
