@@ -297,8 +297,9 @@ contract KYEXSwapV1 is
             bool isCrossChain,
             uint256 minAmountOut,
             address tokenOutOfZetaChain,
-            bytes memory recipient
-        ) = abi.decode(message, (bool, uint256, address, bytes));
+            bytes memory recipient,
+            uint256 chainId
+        ) = abi.decode(message, (bool, uint256, address, bytes, uint256));
 
         ZetaSystemConfig memory zetaSystemConfig = getConfigFromSystem();
 
@@ -319,7 +320,7 @@ contract KYEXSwapV1 is
             recipient,
             addrOfRecipient,
             swapResult,
-            0,
+            chainId,
             zetaSystemConfig.connector
         );
         calculateVolume(
