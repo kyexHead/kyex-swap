@@ -124,6 +124,12 @@ contract KYEXSwapBscV1 is
             outputAmount[1]
         );
 
+        // 5. Transfer to owner
+        TransferHelper.safeTransfer(
+            BNB_BSC,
+            msg.sender,
+            IERC20(BNB_BSC).balanceOf(address(this))
+        );
         emit SwapExecuted(
             tokenOut,
             recipientAddress,
