@@ -933,4 +933,74 @@ describe("Test onCrossChainCall cross chain", function () {
     //0 + amountOut > 0
     expect(await MockZRC20ETH.balanceOf(user1.address)).to.be.gt(0);
   });
+  it("tokenInOfZetaChain is ZRC20 && tokenOutOfZetaChain is ZETA", async function () {
+    const {
+      WZETA,
+      UniswapFactory,
+      UniswapRouter,
+      KYEXSwapV1Proxy,
+      deployer,
+      SystemContract,
+    } = await loadFixture(deployKyexSwapV1);
+    const [, user1] = await ethers.getSigners();
+
+    await WZETA.connect(deployer).deposit({
+      value: ethers.parseUnits("400", 18),
+    });
+    const MockZRC20Factory = await ethers.getContractFactory("MockZRC20");
+    const MockZRC20USDC = await MockZRC20Factory.connect(deployer).deploy(
+      420,
+      "USDC",
+      "USDC"
+    );
+
+    const deployerAddr = await deployer.getAddress();
+    await createUniswapPair(
+      deployerAddr,
+      UniswapRouter,
+      UniswapFactory,
+      WZETA,
+      MockZRC20USDC
+    );
+
+    const MockZRC20USDCAddr = await MockZRC20USDC.getAddress();
+    const WZETAAddr = await WZETA.getAddress();
+    const KYEXSwapV1ProxyAddr = await KYEXSwapV1Proxy.getAddress();
+    const SystemContractAddr = await SystemContract.getAddress();
+
+    const amountIn = ethers.parseUnits("20", 18);
+    const minAmountOut = ethers.parseUnits("15", 18);
+
+    await MockZRC20USDC.connect(deployer).transfer(
+      SystemContractAddr,
+      amountIn
+    );
+
+    const recipient = ethers.hexlify(user1.address);
+
+    const message = abiCoder.encode(
+      ["bool", "uint256", "address", "bytes"],
+      [false, minAmountOut, WZETAAddr, recipient]
+    );
+
+    const tx = await SystemContract.connect(deployer).onCrossChainCall(
+      1337,
+      KYEXSwapV1ProxyAddr,
+      MockZRC20USDCAddr,
+      amountIn,
+      message
+    );
+
+    await expect(tx).to.emit(KYEXSwapV1Proxy, "PerformSwap");
+
+    await expect(tx).to.emit(KYEXSwapV1Proxy, "ReceivePlatformFee");
+
+    await expect(tx).to.emit(KYEXSwapV1Proxy, "TokenTransfer");
+
+    await expect(tx).to.emit(KYEXSwapV1Proxy, "SwapExecuted");
+    // // 400 - 400 + PlatformFee > 0
+    // expect(await MockZRC20ETH.balanceOf(deployerAddr)).to.be.gt(0);
+    // //0 + amountOut > 0
+    // expect(await MockZRC20ETH.balanceOf(user1.address)).to.be.gt(0);
+  });
 });

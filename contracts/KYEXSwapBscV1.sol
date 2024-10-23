@@ -18,7 +18,6 @@ contract KYEXSwapBscV1 is
 {
     address private ZETA_BSC;
     address private BNB_BSC;
-    uint256 private BNB_GAS;
     address private router;
     address private factory;
     uint32 private MAX_DEADLINE;
@@ -38,8 +37,7 @@ contract KYEXSwapBscV1 is
         address _factory,
         address _router,
         address _ZETA_BSC,
-        address _BNB_BSC,
-        uint256 _BNB_GAS
+        address _BNB_BSC
     ) external initializer {
         __Ownable_init();
         __Pausable_init();
@@ -49,7 +47,6 @@ contract KYEXSwapBscV1 is
         router = _router;
         ZETA_BSC = _ZETA_BSC;
         BNB_BSC = _BNB_BSC;
-        BNB_GAS = _BNB_GAS;
     }
 
     /**
@@ -86,6 +83,7 @@ contract KYEXSwapBscV1 is
         address tokenOut,
         address recipientAddress,
         uint256 amountIn,
+        uint256 gasBNB,
         bytes32 originTxHash
     ) external whenNotPaused {
         // 1. Swap: WZETA -> BNB
@@ -103,7 +101,7 @@ contract KYEXSwapBscV1 is
             );
 
         // 2. Deduct swapTxGasUsed from sender
-        uint256 newAmount = outputAmount[1] - BNB_GAS;
+        uint256 newAmount = outputAmount[1] - gasBNB;
         if (newAmount == 0) revert Errors.InsufficientFunds();
 
         // 3. Swap: WETH -> gameFi

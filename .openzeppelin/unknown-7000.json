@@ -1,0 +1,196 @@
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0x07D7fCD47BBF695516F307c3d8B87daf4538BF1E",
+      "txHash": "0xae315698b6061cf003dc8c9a1d74fa90f2af92d18ea250b1848f95248606ecfe",
+      "kind": "uups"
+    },
+    {
+      "address": "0x214584FEf5D50e1cA5295462F458ec09d7af28e3",
+      "txHash": "0xcaebb3d79a94416fd4b6672bdde1c562c708009e1c9c6debd81c294ae26640de",
+      "kind": "uups"
+    },
+    {
+      "address": "0x8117A0076189fC3eB48CCC5d6DD28B61E15C1402",
+      "txHash": "0xa7cd359061059130a60f64a8e4c6f71a8ab6ffa2358419368b9770818106dd0b",
+      "kind": "uups"
+    },
+    {
+      "address": "0x9cC2bFE2d2C5ae9D427CC7961F67E66Bb782Fb2A",
+      "txHash": "0x2345276b91153799c41e59b6b499c59c42d21c07714b1dd035475423cfd64091",
+      "kind": "uups"
+    }
+  ],
+  "impls": {
+    "f3b98537ec1108efd5e8c08c32c0b66d2f563cd7a9e1e24027a7e09e7b06101f": {
+      "address": "0x12D3F2A60E98a0e7Cc9a11FDE5a6E69cF3a34D73",
+      "txHash": "0x8580ec29580dbb160ed137a082bd21c7e887a63ce097409f9bcc5fc147406e6e",
+      "layout": {
+        "solcVersion": "0.8.26",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:40"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "52",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_paused",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_bool",
+            "contract": "PausableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol:29"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "PausableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol:116"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "BITCOIN",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_address",
+            "contract": "KYEXSwapV1",
+            "src": "contracts/KYEXSwapV1.sol:146"
+          },
+          {
+            "label": "ZetaSystemContract",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_contract(SystemContract)5600",
+            "contract": "KYEXSwapV1",
+            "src": "contracts/KYEXSwapV1.sol:146"
+          },
+          {
+            "label": "kyexTreasury",
+            "offset": 0,
+            "slot": "203",
+            "type": "t_address",
+            "contract": "KYEXSwapV1",
+            "src": "contracts/KYEXSwapV1.sol:148"
+          },
+          {
+            "label": "MAX_DEADLINE",
+            "offset": 20,
+            "slot": "203",
+            "type": "t_uint32",
+            "contract": "KYEXSwapV1",
+            "src": "contracts/KYEXSwapV1.sol:149"
+          },
+          {
+            "label": "platformFee",
+            "offset": 24,
+            "slot": "203",
+            "type": "t_uint16",
+            "contract": "KYEXSwapV1",
+            "src": "contracts/KYEXSwapV1.sol:149"
+          },
+          {
+            "label": "volume",
+            "offset": 0,
+            "slot": "204",
+            "type": "t_uint256",
+            "contract": "KYEXSwapV1",
+            "src": "contracts/KYEXSwapV1.sol:150"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(SystemContract)5600": {
+            "label": "contract SystemContract",
+            "numberOfBytes": "20"
+          },
+          "t_uint16": {
+            "label": "uint16",
+            "numberOfBytes": "2"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint32": {
+            "label": "uint32",
+            "numberOfBytes": "4"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {}
+      }
+    }
+  }
+}
