@@ -138,8 +138,8 @@ contract KYEXSwapBscV1 is
         );
     }
 
-    // // **** SWAP (supporting fee-on-transfer tokens) ****
-    // // requires the initial amount to have already been sent to the first pair
+    // **** SWAP (supporting fee-on-transfer tokens) ****
+    // requires the initial amount to have already been sent to the first pair
 
     // function swapExactTokensForEthToZeta(
     //     uint amountIn,

@@ -6,6 +6,8 @@ require("@openzeppelin/hardhat-upgrades");
 //   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const user1 =
   "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+const deployer =
+  "0x19f669c8276dd9e37a18ea90b97896a02e69e8d063d96a2ef978115f5691c9ba";
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
