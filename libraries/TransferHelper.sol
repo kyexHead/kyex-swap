@@ -53,8 +53,8 @@ library TransferHelper {
         );
     }
 
-    function safeTransferZETA(address to, uint256 value) internal {
+    function transferNativeToken(address to, uint256 value) internal {
         (bool success, ) = to.call{value: value}(new bytes(0));
-        require(success, "TransferHelper: ZETA_TRANSFER_FAILED");
+        require(success, "TransferHelper: NATIVE_TOKEN_TRANSFER_FAILED");
     }
 }

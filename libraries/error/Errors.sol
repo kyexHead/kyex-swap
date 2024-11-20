@@ -9,12 +9,12 @@ library Errors {
     error InsufficientFunds();
     error InsufficientGasForWithdraw();
     error NeedsMoreThanZero();
-    error OnlySystemContract();
+    error OnlyGateWay();
     error OnlySupportZETA();
     error InsufficientAllowance();
     error SlippageToleranceExceedsMaximum();
     error PlatformFeeNeedslessThanOneHundredPercent();
-    error IncorrectAmountOfZETASent();
+    error IncorrectAmountSent();
     error ErrorTransferringZeta();
     error ChainIdAlreadyEnabled();
     error ChainIdNotAvailable();
